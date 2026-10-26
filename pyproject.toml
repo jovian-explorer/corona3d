@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "corona3d"
+version = "0.0.1"
+description = "Three-dimensional coronal scene of a coronal mass ejection from public MHD, coronagraph, and radio data"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Keshav Aggarwal", email = "keshavaggarwal2310@gmail.com"}]
+keywords = ["solar physics", "corona", "coronal mass ejection", "MHD", "Alfven speed", "radio bursts", "LASCO", "STEREO"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = ["numpy", "scipy", "matplotlib", "pyvista", "pyhdf", "astropy", "sunpy[net,map]", "PyThea"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+corona3d = "corona3d.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+corona3d = ["default_config.json"]

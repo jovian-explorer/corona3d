@@ -1,0 +1,52 @@
+cff-version: 1.2.0
+message: "If you use corona3d in your work, please cite it, together with the model run, the coronagraph data, and the methods that it lists for each layer."
+title: "corona3d: a three-dimensional coronal scene of a coronal mass ejection from public MHD, coronagraph, and radio data"
+type: software
+authors:
+  - family-names: Aggarwal
+    given-names: Keshav
+    affiliation: "Space Physics Laboratory (SPL), Vikram Sarabhai Space Centre (VSSC), ISRO"
+    email: keshavaggarwal2310@gmail.com
+version: 0.0.1
+license: MIT
+date-released: 2026-10-27
+abstract: >-
+  corona3d is a Python package that builds a three-dimensional scene of a coronal mass ejection
+  (CME) and the corona it propagates through, from public data only. It draws the electron-density
+  surface of a PSI MAS/MAST magnetohydrodynamic model at a chosen plasma level coloured by the
+  Alfven speed, open and closed coronal field lines and the streamer loops above the CME flank,
+  the graduated cylindrical shell of the CME, radio sources placed at their Newkirk heights, and
+  base-difference images of LASCO C2 and STEREO-B COR1 and COR2 placed in the plane of the sky of
+  their spacecraft, seen from Earth, from above the solar north pole, and from STEREO-B. Every
+  layer can be switched on or off, and the default configuration rebuilds the scene of the CME of
+  2013 October 25 studied by Morosan et al. (2022).
+repository-code: "https://github.com/jovian-explorer/corona3d"
+url: "https://jovian-explorer.github.io/software.html#corona3d"
+keywords:
+  - solar corona
+  - coronal mass ejections
+  - MHD
+  - Alfven speed
+  - type II radio bursts
+  - LASCO
+  - STEREO
+  - GCS
+references:
+  - type: article
+    title: "Shock-accelerated electrons during the fast expansion of a coronal mass ejection"
+    authors:
+      - family-names: Morosan
+        given-names: D. E.
+      - family-names: Pomoell
+        given-names: J.
+      - family-names: Kumari
+        given-names: A.
+      - family-names: Vainio
+        given-names: R.
+      - family-names: Kilpua
+        given-names: E. K. J.
+    journal: "Astronomy & Astrophysics"
+    volume: 668
+    start: A15
+    year: 2022
+    doi: 10.1051/0004-6361/202244432

@@ -1,0 +1,9 @@
+__pycache__/
+*.egg-info/
+/build/
+/dist/
+.pytest_cache/
+# working-directory output when corona3d is run inside the repository
+/data/
+/figures/
+/config.json

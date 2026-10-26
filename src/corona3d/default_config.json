@@ -1,0 +1,74 @@
+{
+  "event": "CME and type II (herringbone) burst of 2013-10-25 (Morosan et al. 2022)",
+  "time": "2013-10-25T15:00",
+  "run": "cr2143-medium/hmi_mast_mas_std_0201",
+  "density_scale": 2.0,
+  "model_dlon": -8.243,
+  "ne_level": 90000000.0,
+  "va_range": [
+    100,
+    700
+  ],
+  "sphere_r": 1.2,
+  "earth": [
+    357.372,
+    4.993
+  ],
+  "stereo_b": [
+    215.329,
+    -0.984
+  ],
+  "gcs": {
+    "height": 1.443,
+    "kappa": 0.334,
+    "alpha_deg": 1.071,
+    "lon_stonyhurst": -53.262,
+    "lat_deg": 3.146,
+    "tilt_deg": -146.654
+  },
+  "camera_distance": 6.65,
+  "mesh_rings": {
+    "nbvertsl": 5,
+    "nbvertcirc": 10,
+    "width": 3.0,
+    "color": "#c23ad8"
+  },
+  "n_seeds": 4500,
+  "seed_r": 1.03,
+  "streamer_flank": {
+    "r": 1.8,
+    "half_span": 60.0,
+    "n": 40,
+    "lon": -40.0
+  },
+  "streamer_min_apex": 1.9,
+  "radio_sources": [],
+  "radio_radius": 0.12,
+  "wl_window": [
+    "2013-10-25T14:35",
+    "2013-10-25T15:40"
+  ],
+  "wl_time": "2013-10-25T15:24",
+  "wl_opacity": 0.75,
+  "frame": {
+    "earth": [
+      1.513,
+      0.087,
+      0.158
+    ],
+    "north": [
+      1.554,
+      0.076,
+      0.104
+    ],
+    "stb": [
+      1.455,
+      -0.181,
+      0.093
+    ]
+  },
+  "window": [
+    1080,
+    918
+  ]
+}
