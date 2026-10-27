@@ -1,4 +1,4 @@
-"""corona3d command line: init, new, fetch, gcs, render, export."""
+"""corona3d command line: init, new, fetch, radio-interval, gcs, event, render, export."""
 import argparse
 import json
 import shutil
@@ -27,6 +27,13 @@ def main(argv=None):
     f.add_argument("--cor1a", action="store_true", help="also the STEREO-A COR1 images (for corona3d gcs)")
     f.add_argument("--ovro-lwa", action="store_true",
                    help="only the OVRO-LWA images of the radio_images entries (public AWS bucket)")
+    f.add_argument("--nrh", action="store_true",
+                   help="check the NRH images of the radio_images entries and print how to obtain them "
+                        "(they cannot be downloaded automatically)")
+    ri = sub.add_parser("radio-interval", help="set the burst interval of the radio entries from the images")
+    ri.add_argument("--search", type=float, default=10.0, metavar="MINUTES",
+                    help="search the images within MINUTES of the event time (default 10)")
+    ri.add_argument("--force", action="store_true", help="also replace an interval given by hand")
     g = sub.add_parser("gcs", help="fit the CME shell to the coronagraph images and write it into config.json")
     g.add_argument("--wl", help="folder of the images (default: data/wl of the working directory)")
     g.add_argument("--t-ref", help="time of the six-parameter fit (default: gcs_wl time of config.json)")
@@ -44,6 +51,24 @@ def main(argv=None):
                    help="apex height at --t-out given by hand; step 2 is skipped and the height is recorded as assumed")
     g.add_argument("--height-note", help="reason for --height-out, written into the provenance record")
     g.add_argument("--skip-step1", action="store_true", help="take step 1 from the gcs_fit.json of the working directory")
+    ev = sub.add_parser("event", help="new, fetch, radio-interval, gcs, and render for an event, with a report",
+                        description="Runs every step for one event in the working directory and writes event_report.md; "
+                                    "steps already done are skipped.")
+    ev.add_argument("--home", default=argparse.SUPPRESS, help="working directory (same as the option before the command)")
+    ev.add_argument("--time", required=True, help="time of the reconstruction, e.g. 2024-05-09T17:32")
+    ev.add_argument("--flare", required=True, help="flare position, e.g. S14W28")
+    ev.add_argument("--fit", choices=("auto", "fixed", "skip"), default="auto",
+                    help="auto: free GCS fit, then the fixed-direction fit when it fails or is poor; "
+                         "fixed: only the fixed-direction fit; skip: keep the shell of config.json")
+    ev.add_argument("--iou-min", type=float, default=0.5,
+                    help="mean intersection over union below which a fit is poor (default 0.5)")
+    ev.add_argument("--height-out", type=float, metavar="R_SUN", help="apex height at --time given by hand")
+    ev.add_argument("--height-note", help="reason for --height-out (required with it)")
+    ev.add_argument("--views", help="instruments of the fit (default: c2, cor1 and cor2 of the STEREO spacecraft)")
+    ev.add_argument("--t-ref", help="time of the six-parameter fit (default: the gcs_wl time of config.json)")
+    ev.add_argument("--radio-search", type=float, default=10.0, metavar="MINUTES",
+                    help="radio images are searched within MINUTES of --time (default 10)")
+    ev.add_argument("--force", action="store_true", help="repeat the downloads, the fit, and the figures")
     r = sub.add_parser("render", help="draw the three-panel figure",
                        epilog="layers: " + ", ".join(LAYERS))
     for k in LAYERS:
@@ -92,17 +117,28 @@ def main(argv=None):
         print(f"created {h / 'config.json'} for {a.time} ({cfg['run']}, STEREO-{cfg['stereo_sc']}); "
               "next: corona3d fetch, then fit the shell with corona3d gcs")
         return
+    if a.cmd == "event":
+        from . import pipeline
+        if a.height_out is not None and not a.height_note:
+            sys.exit("--height-out needs --height-note, the reason for the assumed height")
+        sys.exit(pipeline.run(paths.home(a.home, must_exist=False), a))
     h = paths.home(a.home)
     cfg = paths.config(h)
+    if a.cmd == "radio-interval":
+        from . import radio
+        radio.run(h, cfg, a)
+        return
     if a.cmd == "fetch":
         failed = 0
-        everything = not (a.model or a.wl or a.ovro_lwa)
+        everything = not (a.model or a.wl or a.ovro_lwa or a.nrh)
         if a.model or everything:
             failed += fetch.model(h, cfg)
         if a.wl or everything:
             failed += fetch.whitelight(h, cfg, cor1a=a.cor1a)
         if a.ovro_lwa or everything:
             failed += fetch.ovro_lwa(h, cfg)
+        if a.nrh or everything:
+            fetch.nrh(h, cfg)                  # a report only: no automatic download exists
         if failed:
             sys.exit(1)
         return

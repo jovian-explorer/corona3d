@@ -77,11 +77,14 @@ corona3d fetch            # the model run and the white-light images
 corona3d fetch --model    # only the model run
 corona3d fetch --wl       # only the white-light images
 corona3d fetch --cor1a    # as above, and also the STEREO-A COR1 images used by the GCS fit
+corona3d fetch --nrh      # no download: reports which NRH files are present (see below)
 ```
 
 The model run is downloaded file by file from the archive of Predictive Science Inc. (PSI), at `https://www.predsci.com/data/runs/<run>/corona/`. A file that is already present is not downloaded again, a new file is written under its final name only when it is complete, and the partial file of a failed download is removed, so that giving the command again downloads exactly the files that are missing.
 
 The white-light images, namely the C2 images of the Large Angle and Spectrometric Coronagraph (LASCO) and the COR1 and COR2 images of the Solar Terrestrial Relations Observatory (STEREO) spacecraft named by `stereo_sc` in the configuration (B for the event of 2013, A for events after 2014 October), are searched for and downloaded through the Virtual Solar Observatory with SunPy for the time window `wl_window` of the configuration. The search also returns products that corona3d does not draw (polarised C2 images, the COR1 sequences `s5c1` and `n4c1`, and the polarised COR2 sequence `n4c2`), which are kept in `data/wl/` but are not read, except `s5c1` by the GCS fit. After the download, every image is read once, and an image that cannot be read completely, such as one truncated by an interrupted transfer, is deleted. When files fail or are deleted, the command says so and ends with exit code 1, and giving it again downloads the missing files. On an ordinary connection, the whole download (about 130 MB) takes a few minutes.
+
+The 2-D images of the Nançay Radioheliograph (NRH) cannot be downloaded automatically. The BASS2000 archive of the Paris Observatory (`ftp://ftpbass2000.obspm.fr/pub/nancay/`) holds only four snapshots per day at 164 and 327 MHz, together with movies, and it holds the daily visibility files, from which images can be made only with the NRH routines of the IDL SolarSoft package. The 10 s images at the frequencies of the NRH (files `nrh2_FFFF_h60_YYYYMMDD_HHMMSScCC_i.fts`) are supplied by the Radio Solar Database at Nançay (`https://rsdb.obs-nancay.fr/`) after a request there. Therefore `corona3d fetch --nrh` downloads nothing. For every NRH entry of `radio_images`, it lists the frequencies whose files in `data/nrh/` overlap the interval of the entry and those that do not, and, for the missing ones, it repeats the manual step: request the Stokes I images for the frequencies and the interval from the Radio Solar Database, and copy the files into `data/nrh/`. The check is also made by `corona3d fetch` without options.
 
 ## 4. Drawing the figure
 
@@ -152,7 +155,7 @@ A `wl_time` outside `wl_window`, or one whose nearest frame is the base frame it
 
 ### 5.7 `radio`: radio sources (off)
 
-This layer draws the sources of a radio burst as coloured blobs, in the manner of the blobs in Fig. 7 of Morosan et al. (2022). Its input is radio images of two instruments, which may be used together. The first is the 2-D images of the Nançay Radioheliograph (NRH) at 150 to 450 MHz: the files `nrh2_FFFF_..._i.fts`, one per frequency and observing period, each holding a Stokes I image of 64 × 64 pixels about every 10 s. Since the BASS2000 archive of the Paris Observatory delivers these files only on request, `corona3d fetch` does not download them; they are copied into `data/nrh/` of the working directory. The second is the spectral images of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA) at 32 to 87 MHz, available from 2024 April onward: one file `ovro-lwa-352.lev1_mfs_10s.<time>Z.image_I.hdf` per 10 s integration, with 12 band images centred at 34.1 to 84.6 MHz. These files are public, in the OVRO-LWA solar data bucket on Amazon Web Services, and `corona3d fetch --ovro-lwa` downloads the band-averaged files of the interval of every OVRO-LWA entry.
+This layer draws the sources of a radio burst as coloured blobs, in the manner of the blobs in Fig. 7 of Morosan et al. (2022). Its input is radio images of two instruments, which may be used together. The first is the 2-D images of the Nançay Radioheliograph (NRH) at 150 to 450 MHz: the files `nrh2_FFFF_..._i.fts`, one per frequency and observing period, each holding a Stokes I image of 64 × 64 pixels about every 10 s. Since these files are supplied only on request by the Radio Solar Database at Nançay (Section 3), `corona3d fetch` does not download them; they are copied into `data/nrh/` of the working directory, and `corona3d fetch --nrh` checks which frequencies they cover. The second is the spectral images of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA) at 32 to 87 MHz, available from 2024 April onward: one file `ovro-lwa-352.lev1_mfs_10s.<time>Z.image_I.hdf` per 10 s integration, with 12 band images centred at 34.1 to 84.6 MHz. These files are public, in the OVRO-LWA solar data bucket on Amazon Web Services, and `corona3d fetch --ovro-lwa` downloads the band-averaged files of the interval of every OVRO-LWA entry.
 
 The image sets are listed under `radio_images` in `config.json`, one entry per instrument, for example
 
@@ -231,7 +234,7 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | `n_seeds`, `seed_r` | 4500, 1.03 | number and radius of the footpoints of the open and closed lines |
 | `line_r_max` | 3.0 | field lines are drawn only within this radius, R⊙ |
 | `streamer_max_lines` | 150 | at most this many streamer lines are drawn, an even subset |
-| `radio_images` | one NRH entry: folder `data/nrh`, 14:59 to 15:03 UT every 60 s, 150.9 and 432 MHz, level 0.5, min_tb 10⁸ K, no contours | radio image sets for the blobs, NRH or OVRO-LWA (Section 5.7) |
+| `radio_images` | one NRH entry: folder `data/nrh`, 14:59 to 15:03 UT every 60 s, 150.9 and 432 MHz, level 0.5, min_tb 10⁸ K, no contours | radio image sets for the blobs, NRH or OVRO-LWA (Section 5.7); the optional key `interval_source` is `"default"` when `corona3d new` wrote the interval, `"data"` when `corona3d radio-interval` chose it from the images, and absent when it was given by hand (Section 9.5) |
 | `radio_colormaps` | spring, winter, autumn, summer | colour maps of the blob chains, one per frequency |
 | `radio_sources` | [] | other radio sources (Section 5.7) |
 | `radio_radius` | 0.12 | radius of the source spheres, R⊙ |
@@ -365,6 +368,30 @@ The command writes two files into the working directory. `gcs_fit.json` holds th
    ```
 4. Run `corona3d fetch --cor1a` and fit the shell with `corona3d gcs` (Section 9.3).
 5. Copy the NRH image files of the event into `data/nrh/`, set the burst interval and the frequencies of each instrument under `radio_images`, and, for OVRO-LWA, run `corona3d fetch --ovro-lwa`; other positions can be entered under `radio_sources`. Then run `corona3d render --radio`.
+
+### 9.5 `corona3d radio-interval` and `corona3d event`: from a time to the figures
+
+```
+corona3d radio-interval [--search MINUTES] [--force]
+corona3d event --time 2024-05-09T17:32 --flare S14W28 [--home DIR] [--fit auto|fixed|skip]
+               [--height-out R --height-note TEXT] [--iou-min 0.5] [--views LIST] [--t-ref T]
+               [--radio-search MINUTES] [--force]
+```
+
+`corona3d radio-interval` chooses the interval of the radio blobs from the images themselves. For every frequency of a `radio_images` entry, it takes the brightest pixel of each image within `--search` minutes of the event time (default 10) and keeps the images whose brightest pixel reaches `min_tb`. Images separated by more than three times the cadence, and at least 60 s, belong to different runs, and the run that holds the brightest image is the burst of that frequency. The entry takes the earliest start and the latest end of its frequencies, and its `step_s` is lengthened so that at most about thirteen blobs are drawn per frequency. The command writes `start`, `end`, `step_s`, and `"interval_source": "data"` into `config.json` and prints the interval, the number of images, and the peak brightness temperature of every frequency. It changes only the entries that `corona3d new` wrote (`"interval_source": "default"`); an interval given by hand is kept unless `--force` is given. A frequency without any image at or above `min_tb` is named in the message, and an entry in which no frequency reaches `min_tb` keeps its interval.
+
+`corona3d event` runs all the steps for one event in the working directory (`--home`, otherwise the current folder) and ends with the file `event_report.md`. The steps are the following.
+
+1. `new` writes `config.json` from `--time` and `--flare` (Section 9.2) when it does not exist; a `config.json` of another time stops the command.
+2. `fetch` downloads the model run, the white-light images, and, from 2024 April onward, the OVRO-LWA images of the search window of `--radio-search` minutes (default 10), so that the interval can be chosen from them, and it checks the NRH files (Section 3).
+3. `radio-interval` chooses the burst interval as described above.
+4. `gcs` fits the shell to the coronagraph images of `--views` (default C2, COR1, and COR2 of the spacecraft of `stereo_sc`, each when its images exist) at `--t-ref` (default the `gcs_wl` time of `config.json`). With `--fit auto`, the free fit comes first, and the fit with the direction held at the flare site (Section 9.3, `--fix-direction`) follows when the free fit fails, for instance because the CME envelope is not found, or when it is poor. A fit is poor when the mean IoU over the instruments is below `--iou-min` (default 0.5), when no instrument gave an envelope, or when a fitted parameter lies within 0.5 % of its range from a bound of the optimisation. The fixed-direction fit replaces a poor free fit even when it is poor as well, and the report states both outcomes. `--fit fixed` runs only the fixed-direction fit, and `--fit skip` keeps the shell of `config.json`. `--height-out` with `--height-note` gives the apex height by hand as in Section 9.3.
+5. `render` draws the default figure (`figures/corona3d.png`), the figure with the coronagraph images that exist (`figures/wl/corona3d.png`, as with `--c2`, `--cor1`, and `--cor2`), and the figure with the radio sources (`figures/radio/corona3d.png`, as with `--radio`) when radio files exist. A figure without data is skipped, and the rendering defaults are those of Section 4.
+6. `report` writes `event_report.md`.
+
+Every step can be repeated. The file `event_state.json` of the working directory records the downloads and the fit, a fit is repeated only when the flare, the times, or the height given by hand differ from the recorded fit, and a figure is drawn again only when it is older than `config.json`. `--force` repeats the downloads, the fit, and the figures. The command ends with exit code 1 when a download, the fit, or a figure failed, and the report names the failure.
+
+`event_report.md` has five sections. *Measured* lists the fitted shell with its parameters, the apex height when it was extrapolated from the front, and the radio intervals chosen from the images. *Assumed* lists, with the reason of each, what the data do not give: a height given by hand, an axis held at the flare site, the steady-state MAS/MAST corona, the Newkirk placement of the radio sources, and a radio interval that remained the default window. *Missing data* lists the absent model files, coronagraph images, and radio files (with the manual step for the NRH), the frequencies without a burst, and the steps that failed. *Fit quality* gives the outcome of each fit and the IoU per instrument. *Figures* lists the figures drawn. The figure with the coronagraph images cannot be drawn when no image precedes the chosen time; for 2024 May 9, for example, the LASCO C2 files obtained cover only 14:48 UT and the period from 18:52 UT, so that the report names this failure and a later `wl_time` is needed.
 
 ## 10. How the results were checked
 

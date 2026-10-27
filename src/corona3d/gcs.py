@@ -35,6 +35,32 @@ T_OUT = "2013-10-25T15:00:00"
 VIEWS = ("c2", "cor1a", "cor1b")
 KEYS = ["height", "kappa", "alpha_deg", "lon_stonyhurst", "lat_deg", "tilt_pythea_deg"]
 
+IOU_MIN = 0.5                                          # mean IoU below which a fit counts as poor (`corona3d event`)
+
+
+def bounds(flare, fix_direction=False):
+    """Bounds of the optimised parameters: height, kappa, alpha, [lon, lat unless fixed], tilt."""
+    return [(1.5, 15.0), (0.1, 0.8), (0.0, 60.0)] + ([] if fix_direction else
+            [(flare[0] - 40, flare[0] + 40), (flare[1] - 35, flare[1] + 35)]) + [(-90.0, 90.0)]
+
+
+def quality(out, flare, fix_direction=False, iou_min=IOU_MIN):
+    """Problems of a result of fit(): [] when it is acceptable. A fit is poor when the mean IoU
+    over the instruments is below iou_min, when no instrument gave an IoU, or when a fitted
+    parameter lies within 0.5 % of its range from a bound of the optimisation."""
+    t, why = out["t_ref"], []
+    iou = t.get("iou") or {}
+    if not iou:
+        why.append("no instrument had an envelope")
+    elif np.mean(list(iou.values())) < iou_min:
+        why.append(f"mean IoU {np.mean(list(iou.values())):.2f} is below {iou_min:g}")
+    names = ["height", "kappa", "alpha_deg"] + ([] if fix_direction else ["lon_stonyhurst", "lat_deg"]) + ["tilt_pythea_deg"]
+    for n, (lo, hi) in zip(names, bounds(flare, fix_direction)):
+        if min(t[n] - lo, hi - t[n]) <= 0.005 * (hi - lo):
+            why.append(f"{n} = {t[n]:g} is at its bound ({lo:g} to {hi:g})")
+    return why
+
+
 def _load():
     """Import the packages needed by a fit (not by the pure functions below)."""
     global u, sunpy, SkyCoord, fits, gcs, binary_closing, binary_dilation, binary_fill_holes
@@ -243,9 +269,7 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
             raise SystemExit(f"no CME envelope in any of {keys} within 6 min of {t_ref}; check the times and --flare")
         full = (lambda q: [q[0], q[1], q[2], flare[0], flare[1], q[3]]) if fix_direction else list
         cost = lambda q: 1.0 if q[1] >= 0.95 else 1.0 - np.mean([v.iou(shell(full(q), t_ref)) for _, v in V.values()])
-        bounds = [(1.5, 15.0), (0.1, 0.8), (0.0, 60.0)] + ([] if fix_direction else
-                  [(flare[0] - 40, flare[0] + 40), (flare[1] - 35, flare[1] + 35)]) + [(-90.0, 90.0)]
-        q24 = full(list(differential_evolution(cost, bounds, popsize=12, maxiter=60, tol=1e-4, seed=3,
+        q24 = full(list(differential_evolution(cost, bounds(flare, fix_direction), popsize=12, maxiter=60, tol=1e-4, seed=3,
                                                polish=True).x))
     V = views_at(fr, base, tr, keys, flare, running)
     out = {"t_ref": dict(zip(KEYS, [round(float(v), 3) for v in q24]), time=t_ref,
@@ -332,9 +356,15 @@ def run(home, cfg, a):
     previous = json.loads(out_file.read_text(encoding="utf-8")) if a.skip_step1 else None
     out = fit(a.wl or wl_dir(home), t_ref, t_out, flare, keys, a.fix_direction, a.front, previous,
               a.running_diff, a.height_out, a.height_note)
+    write_result(home, out, flare, keys, a.fix_direction, a.running_diff)
+
+
+def write_result(home, out, flare, keys, fix_direction=False, running=None):
+    """Write gcs_fit.json and the keys gcs, gcs_wl, gcs_fit of config.json for a result of fit()."""
+    out_file = Path(home) / "gcs_fit.json"
     out_file.write_text(json.dumps(out, indent=1), encoding="utf-8")
     f = Path(home) / "config.json"
     user = json.loads(f.read_text(encoding="utf-8"))
-    user.update(config_update(out, flare, keys, a.fix_direction, a.running_diff))
+    user.update(config_update(out, flare, keys, fix_direction, running))
     f.write_text(json.dumps(user, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {out_file} and the keys gcs, gcs_wl, and gcs_fit of {f}")

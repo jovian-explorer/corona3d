@@ -106,3 +106,38 @@ def ovro_lwa(h, cfg):
                 print(f"{f.name}: failed ({e})")
                 failed += 1
     return failed
+
+
+NRH_MANUAL = ("The NRH has no public automatic download of its 2-D images. BASS2000 (ftpbass2000.obspm.fr) holds only "
+              "four 164 and 327 MHz snapshots per day and movies, and the 10 s images (nrh2_FFFF_h60_YYYYMMDD_"
+              "HHMMSScCC_i.fts) are delivered by the Radio Solar Database at Nancay, https://rsdb.obs-nancay.fr/, after "
+              "a request there. Request the Stokes I images for the frequencies and the interval above, and copy the "
+              "files into {folder}.")
+
+
+def nrh(h, cfg):
+    """No download: the 2-D NRH images cannot be fetched automatically. Reports, for every NRH entry of
+    radio_images, which frequencies the files in its folder cover (overlap) between start and end and, when
+    some are missing, the manual step. Returns the number of missing frequencies."""
+    from . import nrh as nrh_mod
+    from .whitelight import utc
+    missing = 0
+    for rs in cfg["radio_images"]:
+        if rs["instrument"] != "nrh":
+            continue
+        folder = h / rs["folder"]
+        t0, t1 = utc(rs["start"]), utc(rs["end"])
+        short = []
+        for f in rs["freqs"]:
+            spans = nrh_mod.coverage(folder, f) if folder.exists() else []
+            if any(a <= t1 and t0 <= b for a, b in spans):
+                print(f"NRH {f:g} MHz: files overlap {rs['start']} to {rs['end']} (" +
+                      ", ".join(f"{a:%H:%M:%S}-{b:%H:%M:%S}" for a, b in spans) + " UT)")
+            else:
+                got = ", ".join(f"{a:%H:%M:%S}-{b:%H:%M:%S}" for a, b in spans) or "no file"
+                print(f"NRH {f:g} MHz: missing for {rs['start']} to {rs['end']} UT ({got})")
+                short.append(f)
+        missing += len(short)
+        if short:
+            print(NRH_MANUAL.format(folder=folder))
+    return missing

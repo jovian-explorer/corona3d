@@ -57,11 +57,12 @@ def new_config(time, flare, earth_stereo=None, run=None):
     iso = lambda dt: dt.strftime("%Y-%m-%dT%H:%M:%S")
     shell = dict(kappa=0.4, alpha_deg=30.0, lon_stonyhurst=lon, lat_deg=lat, tilt_deg=-90.0)
     radio = [dict(instrument="nrh", folder="data/nrh", freqs=[150.9, 228.0], start=iso(t),
-                  end=iso(t + timedelta(minutes=5)), step_s=30, level=0.5, min_tb=1e8, contours=False)]
+                  end=iso(t + timedelta(minutes=5)), step_s=30, level=0.5, min_tb=1e8, contours=False,
+                  interval_source="default")]
     if t >= OVRO_LWA_START:
         radio.append(dict(instrument="ovro_lwa", folder="data/ovro_lwa", freqs=[34.1, 52.4, 70.8, 84.6],
                           start=iso(t), end=iso(t + timedelta(minutes=5)), step_s=30, level=0.5,
-                          min_tb=1e8, contours=False))
+                          min_tb=1e8, contours=False, interval_source="default"))
     return {
         "event": f"event of {t:%Y-%m-%d %H:%M} UT, flare {flare.upper()} (set up with corona3d new)",
         "time": iso(t),

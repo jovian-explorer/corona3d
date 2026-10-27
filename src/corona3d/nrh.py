@@ -32,6 +32,17 @@ def files(folder):
     return out
 
 
+def coverage(folder, freq):
+    """[(first, last)] frame times (datetime, UTC) of each NRH2 file of `freq` [MHz] in a folder."""
+    out = []
+    for p in files(folder).get(round(freq, 1), []):
+        with fits.open(p) as h:
+            day = datetime.fromisoformat(h[0].header["DATE-OBS"][:10])
+            ms = np.asarray(h[1].data["TIME"], float)
+        out.append((day + timedelta(milliseconds=float(ms.min())), day + timedelta(milliseconds=float(ms.max()))))
+    return out
+
+
 def image_at(folder, freq, time):
     """The image of `freq` [MHz] nearest to `time` (datetime), from the files that cover it;
     returns (image [K], frame time, x and y of every pixel in R_sun, x west and y north)."""
