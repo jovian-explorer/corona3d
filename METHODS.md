@@ -40,7 +40,7 @@ Morosan et al. (2022) concluded that the herringbones originate where the CME fl
 
 The observers are given by their Carrington longitude and latitude at 15:00 UT on 2013 October 25: Earth at (357.372°, 4.993°) and STEREO-B at (215.329°, −0.984°), 142° apart. These values were computed with SunPy from the Horizons ephemerides of the Jet Propulsion Laboratory (JPL) (user guide, Section 8). For each observer, corona3d uses the heliocentric-Cartesian axes of the observer's sky: x towards the west limb, y towards solar north (projected onto the plane of the sky), and z towards the observer.
 
-Each of the three panels is given by an entry of `views`: an observer (`"from": "earth"`, `"stereo_b"`, or `"north"`, the last looking down the rotation axis with the direction of the Earth at the bottom of the panel), or any viewing direction given by a Carrington longitude and latitude, with solar north up and an optional roll angle. The panels are drawn with an orthographic (parallel) projection, so that every depth along the line of sight is drawn at the scale of the plane of the sky, which keeps the model, the shell, the radio sources, and the coronagraph images at one common scale in R⊙. In contrast, a perspective camera at 6.65 R⊙ would magnify structures in front of the plane of the sky by up to 18 %. The half-height and the offset of Sun centre of each panel (`frame` in each view) follow the layout of the published figure. When coronagraph images are shown, the panel of their spacecraft is widened to 6 R⊙ (C2 or COR2) or 4 R⊙ (COR1 alone), while `--half` sets one half-height for all panels.
+Each of the three panels is given by an entry of `views`: an observer (`"from": "earth"`, `"stereo_b"`, or `"north"`, the last looking down the rotation axis with the direction of the Earth at the bottom of the panel), or any viewing direction given by a Carrington longitude and latitude, with solar north up and an optional roll angle. The panels are drawn with an orthographic (parallel) projection, so that every depth along the line of sight is drawn at the scale of the plane of the sky, which keeps the model, the shell, the radio sources, and the coronagraph images at one common scale in R⊙. In contrast, a perspective camera at 6.65 R⊙ would magnify structures in front of the plane of the sky by up to 18 %. Such a camera is nevertheless available with `"projection": "perspective"`, at `camera_distance` = 6.65 R⊙ for the default framing of each panel, so that a figure can be drawn with the perspective of the published Fig. 7 for comparison. The half-height and the offset of Sun centre of each panel (`frame` in each view) follow the layout of the published figure. When coronagraph images are shown, the panel of their spacecraft is widened to 6 R⊙ (C2 or COR2) or 4 R⊙ (COR1 alone), while `--half` sets one half-height for all panels.
 
 ## 7. The CME shell (layer `gcs`)
 
@@ -56,7 +56,9 @@ The shell at 15:00 UT (layer `gcs`, key `gcs`) is drawn when no coronagraph imag
 
 ## 8. Radio sources (layer `radio`)
 
-The sources are given as sky-plane positions seen from Earth (x west, y north; in R⊙, or in arcsec with `"unit": "arcsec"`, converted with the angular radius of the Sun seen from Earth at `time`, 964.8 arcsec at 15:00 UT on 2013 October 25), each with its frequency. Each source is placed at the radial distance where the four-fold Newkirk (1961) density model,
+The main input of the layer is the 2-D images of the Nançay Radioheliograph (NRH; Kerdraon & Delouis 1997), the Stokes I brightness temperature of 64 × 64 pixels at one frequency about every 10 s, rotated to solar north up, with Sun centre at the reference pixel (CRPIX, counted from 1) and one solar radius spanning SOLAR_R pixels. The images of 2013 October 25 at 150.9 MHz confirm the orientation, since the burst source lies on the south-east limb, where Morosan et al. (2022) located the herringbones. For each frequency, one image is taken every `step_s` seconds between `start` and `end`, and an image is kept when its peak brightness temperature reaches `min_tb` (10⁸ K). In each kept image, the centroid is the brightness-weighted mean position of the pixels brighter than `level` (0.5) times the peak. These sky-plane centroids are then placed as described below and drawn as a chain of blobs coloured from the first to the last image, as Morosan et al. (2022) drew their sources at successive times. The uncertainty of a centroid is of the order of one pixel, 1/16 R⊙, in the plane of the sky.
+
+Other radio sources, and the NRH centroids, are given as sky-plane positions seen from Earth (x west, y north; in R⊙, or in arcsec with `"unit": "arcsec"`, converted with the angular radius of the Sun seen from Earth at `time`, 964.8 arcsec at 15:00 UT on 2013 October 25), each with its frequency. Each source is placed at the radial distance where the four-fold Newkirk (1961) density model,
 
 n_e(r) = 4 × 4.2 × 10⁴ × 10^{4.32/r} cm⁻³,
 
@@ -112,6 +114,8 @@ In particular, the coronagraph images are level 0.5 and are not calibrated photo
 Brueckner, G. E., Howard, R. A., Koomen, M. J., et al. 1995, Solar Physics, 162, 357. https://doi.org/10.1007/BF00733434
 
 Howard, R. A., Moses, J. D., Vourlidas, A., et al. 2008, Space Science Reviews, 136, 67. https://doi.org/10.1007/s11214-008-9341-4
+
+Kerdraon, A., & Delouis, J.-M. 1997, in Coronal Physics from Radio and Space Observations, Lecture Notes in Physics, 483, 192. https://doi.org/10.1007/BFb0106458
 
 Kouloumvakos, A., Rodriguez-Garcia, L., Gieseler, J., et al. 2022, Frontiers in Astronomy and Space Sciences, 9, 974137. https://doi.org/10.3389/fspas.2022.974137
 

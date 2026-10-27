@@ -138,3 +138,15 @@ def test_views_can_be_set_for_every_panel():
     assert np.allclose(d, [0, 0, 1], atol=1e-9) and up @ unit_vec(*p["earth"]) < -0.99   # Earth below
     with pytest.raises(ValueError):
         view_geometry({"from": "mars"}, p)
+
+
+def test_perspective_projection_magnifies_the_near_side(tmp_path):
+    """The camera of the published figure (perspective, 6.65 R_sun) draws the sphere larger than
+    the orthographic projection at the same half-height, since its near side is closer."""
+    main(["--home", str(tmp_path), "init"])
+    off = dict(surface=False, open=False, closed=False, streamer=False, gcs=False)
+    r = {}
+    for proj in ("orthographic", "perspective"):
+        make_figure(f"{proj}/f.png", tmp_path, params={"projection": proj}, **off)
+        r[proj] = _disc_radius(tmp_path / proj / "view_b.png")
+    assert 1.005 < r["perspective"] / r["orthographic"] < 1.4      # the limb lies slightly nearer

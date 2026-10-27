@@ -21,13 +21,13 @@ def observer_basis(lon_deg, lat_deg):
     return ex, ey, ez
 
 
-def deproject(x_pos, y_pos, r, obs_lon, obs_lat):
+def deproject(x_pos, y_pos, r, obs_lon, obs_lat, warn=True):
     """Plane-of-sky (x west, y north, R_sun) at radial distance r -> Carrington Cartesian,
     taking the solution on the observer side of the plane of sky. A position farther from Sun
     centre than r cannot lie at r; it is kept in the plane of the sky, with a warning."""
     ex, ey, ez = observer_basis(obs_lon, obs_lat)
     rho2 = np.asarray(x_pos) ** 2 + np.asarray(y_pos) ** 2
-    if (rho2 > r**2).any():
+    if warn and (rho2 > r**2).any():
         warnings.warn(f"{int((rho2 > r**2).sum())} radio position(s) lie farther than {r:.3f} R_sun "
                       "from Sun centre in the plane of the sky; kept in the plane of the sky")
     z = np.sqrt(np.clip(r**2 - rho2, 0, None))

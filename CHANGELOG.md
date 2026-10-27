@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The radio layer reads the 2-D images of the Nançay Radioheliograph (`corona3d/nrh.py`), copied into `data/nrh/` of the working directory, and draws the sources of a burst as a chain of coloured blobs for each frequency, one per time step, at the Newkirk height of that frequency, in the manner of the blobs in Fig. 7 of Morosan et al. (2022); contours of the last image are optional (`radio_nrh` in `config.json`). For 2013 October 25, the images at 150.9 and 432 MHz between 14:59 and 15:03 UT give five and three blobs.
+- At most 150 streamer lines are drawn (`streamer_max_lines`), more faintly when the radio layer is on, so that the blobs remain visible; the notes of each panel are placed at its top right.
+- `"projection": "perspective"` draws the panels with the perspective camera of the published Fig. 7 (`camera_distance` 6.65 R⊙), and the panels have its aspect (`window` 1200 × 918 pixels); the orthographic projection remains the default.
+- The README states that corona3d follows the method described in Morosan et al. (2022) and the layout of their Fig. 7, without reproducing that figure exactly.
+- Offline tests of the NRH reader and of the radio blobs on synthetic NRH files (`tests/test_nrh.py`).
 - The height-time step of `scripts/gcs_fit.py` is divided into three functions (`projection_factor`, `front_profile`, and `extrapolate`), which `tests/test_gcs_fit.py` checks on a synthetic rise with a known speed and height; the fit of 2013 October 25 is unchanged (1.931 R⊙, 1039 km s⁻¹), and CI runs these tests from the checkout.
 - The installation and the offline tests were checked on Python 3.12.15 as well as 3.13.
 - The README, METHODS.md, the user guide, the model audit, and this changelog were edited into the author's writing style, with every number, citation, and command unchanged.

@@ -62,6 +62,7 @@ corona3d_work/
   data/
     cr2143-medium_hmi_mast_mas_std_0201/   rho002.hdf, br002.hdf, bt002.hdf, bp002.hdf, va002.hdf (53 MB)
     wl/                                     LASCO C2 and STEREO-B COR1 and COR2 images (about 75 MB)
+    nrh/                                    NRH image files, copied by the user (Section 5.7)
   figures/
     corona3d.png                            the three-panel figure
     view_a.png, view_b.png, view_c.png      the three panels at full resolution
@@ -151,16 +152,24 @@ A `wl_time` outside `wl_window`, or one whose nearest frame is the base frame it
 
 ### 5.7 `radio`: radio sources (off)
 
-This layer draws spheres at the positions of radio sources, coloured by frequency from light blue at 150 MHz to magenta at 450 MHz and above. corona3d does not derive the sources from radio images, and their positions are therefore given by the user as a list in which every source has its frequency in MHz (`freq`) and its sky-plane position seen from Earth, `x` towards the west limb and `y` towards solar north, in R⊙ or, with `"unit": "arcsec"`, in arcsec. A source may be one position or a series of positions (lists of equal length for `x` and `y`), for example the positions of a centroid at successive times. The list is best written under `radio_sources` in `config.json`, for example
+This layer draws the sources of a radio burst as coloured blobs, in the manner of the blobs in Fig. 7 of Morosan et al. (2022). Its main input is the 2-D images of the Nançay Radioheliograph (NRH): the files `nrh2_FFFF_..._i.fts`, one per frequency and observing period, each holding a Stokes I image of 64 × 64 pixels about every 10 s. Since the BASS2000 archive of the Paris Observatory delivers these files only on request, `corona3d fetch` does not download them; they are copied into `data/nrh/` of the working directory, where the layer finds them by their names.
+
+For each frequency in `radio_nrh.freqs`, the layer takes one image every `radio_nrh.step_s` seconds between `radio_nrh.start` and `radio_nrh.end`, keeps the images whose peak brightness temperature reaches `radio_nrh.min_tb`, and measures in each the centroid of the pixels brighter than `radio_nrh.level` times the peak. Each centroid becomes a blob at the height that the four-fold Newkirk model gives for that frequency at the second harmonic, on the side of the plane of the sky that faces Earth, and the blobs of one frequency are coloured along one colour map from the first image to the last (`radio_nrh.colormaps`: spring, winter, autumn, and summer for the first to the fourth frequency). With `"contours": true`, the contour of the last image at `level` times its peak is drawn as well, at the same height. The terminal lists every image used, with its time, peak brightness temperature, centroid, and height:
+
+```
+radio: NRH 150.9 MHz 14:58:55 UT, peak 1.15e+10 K, centroid (-1.20, -0.01) R_sun, at 1.647 R_sun
+```
+
+For the event of 2013 October 25, the default settings take one image per minute between 14:59 and 15:03 UT at 150.9 and 432 MHz, which gives five blobs at 1.647 R⊙ and three at 1.221 R⊙. A frequency or a time that the files do not cover stops the rendering with a message that names the times the files cover. The NRH files of the afternoon of that day end at 15:04:52 UT, and the afternoon files at 228 and 327 MHz were not available, so that the blobs follow the figure of Morosan et al. (2022), drawn at 173 and 228 MHz, in kind but not in frequency. When the layer is on, the purple streamer lines are drawn more faintly, so that the blobs remain visible; a blob that lies inside the density surface, as the 432 MHz blobs do from Earth, remains hidden behind it, since the reconstruction keeps true depths.
+
+Positions measured with other instruments can be added under `radio_sources` in `config.json`, as a list in which every source has its frequency in MHz (`freq`) and its sky-plane position seen from Earth, `x` towards the west limb and `y` towards solar north, in R⊙ or, with `"unit": "arcsec"`, in arcsec. A source may be one position or a series of positions (lists of equal length for `x` and `y`):
 
 ```json
 {"radio_sources": [{"freq": 173, "x": [-1.19, -1.14, -1.09], "y": [-0.15, -0.12, -0.08]},
                    {"freq": 228, "x": -1100, "y": -190, "unit": "arcsec"}]}
 ```
 
-after which `corona3d render --radio` draws them. In macOS and Linux, the same list can also be given on the command line enclosed in single quotes (`--radio-sources '[{"freq": 173, ...}]'`). However, the shells of Windows treat quotes inside an argument differently, so that on Windows the configuration file is the reliable route. The numbers above only illustrate the format and are not measured positions.
-
-Each source is placed at the height where the four-fold Newkirk density model gives the plasma frequency of its frequency at the second harmonic (1.576 R⊙ at 173 MHz and 1.449 R⊙ at 228 MHz), on the side of the plane of the sky that faces Earth (METHODS.md, Section 8). Arcseconds are converted with the angular radius of the Sun seen from Earth at `time` (964.8 arcsec on 2013 October 25). A position farther from Sun centre than its height cannot lie at that height, and it is therefore kept in the plane of the sky with a printed warning. For the event of 2013 October 25, the positions are measured from the images of the Nançay Radioheliograph, which the BASS2000 archive of the Paris Observatory delivers on request as visibilities, to be imaged with the NRH software of SolarSoft.
+The numbers above only illustrate the format and are not measured positions. In macOS and Linux, the same list can also be given on the command line enclosed in single quotes (`--radio-sources '[{"freq": 173, ...}]'`); the shells of Windows treat quotes inside an argument differently, so that on Windows the configuration file is the reliable route. These sources are placed in the same way as the NRH blobs and are coloured by frequency, from light blue at 150 MHz to magenta at 450 MHz and above. Arcseconds are converted with the angular radius of the Sun seen from Earth at `time` (964.8 arcsec on 2013 October 25), and a position farther from Sun centre than its height is kept in the plane of the sky, with a warning (METHODS.md, Section 8).
 
 ## 6. The viewpoints
 
@@ -206,14 +215,18 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | `mesh_rings` | 5, 10, width 3, `#c23ad8` | vertices of the shell along its legs and front, line width, and colour |
 | `n_seeds`, `seed_r` | 4500, 1.03 | number and radius of the footpoints of the open and closed lines |
 | `line_r_max` | 3.0 | field lines are drawn only within this radius, R⊙ |
-| `radio_sources` | [] | radio sources (Section 5.7) |
+| `streamer_max_lines` | 150 | at most this many streamer lines are drawn, an even subset |
+| `radio_nrh` | folder `data/nrh`, 14:59 to 15:03 UT every 60 s, 150.9 and 432 MHz, level 0.5, min_tb 10⁸ K, no contours | NRH images for the radio blobs (Section 5.7) |
+| `radio_sources` | [] | other radio sources (Section 5.7) |
 | `radio_radius` | 0.12 | radius of the source spheres, R⊙ |
 | `wl_window` | 14:35 to 15:40 UT | window of the white-light download; its first frame of each instrument is the base |
 | `wl_time` | `2013-10-25T15:24` | time of the white-light frames |
 | `wl_mode` | `"ratio"` | `"ratio"` (frame / base − 1) or `"difference"` (frame − base) |
 | `wl_opacity` | 0.75 | opacity of the coronagraph images |
 | `views` | Earth, north pole, STEREO-B | viewpoint, framing, and title of each panel (Section 6) |
-| `window` | [1080, 918] | size of each panel image, pixels |
+| `projection` | `"orthographic"` | `"orthographic"`, which draws every depth at the scale of the plane of the sky, or `"perspective"`, the camera of the published figure |
+| `camera_distance` | 6.65 | distance of the perspective camera at the default framing of each panel, R⊙ |
+| `window` | [1200, 918] | size of each panel image, pixels (the aspect of the panels of the published figure) |
 
 A density surface at the plasma level of another frequency is obtained from the harmonic plasma relation, n_e = (f / 2 / 8980 Hz)² cm⁻³, so that, for example, 228 MHz at the harmonic gives 1.61 × 10⁸ cm⁻³:
 
@@ -263,7 +276,7 @@ corona3d is set up for the event of 2013 October 25, but every element of the ev
    python scripts/gcs_fit.py <working directory>/data/wl --out gcs_fit.json
    ```
    from a copy of the repository. The script fits the six GCS parameters to the CME envelopes in C2, COR1-A, and COR1-B at the time `T_REF` set at its top, and it extrapolates the apex height to the time `T_OUT` from the front in the limb view (METHODS.md, Section 7). The flare site `FLARE`, which seeds the envelopes, is also set at its top, and the results `t1500` and `t1524` go under `gcs` and `gcs_wl` (tilt minus 90°).
-5. Enter the radio sources under `radio_sources`, and run `corona3d render`.
+5. Copy the NRH image files of the event into `data/nrh/`, set the burst interval and the frequencies under `radio_nrh` (or enter other positions under `radio_sources`), and run `corona3d render --radio`.
 
 The third observer and the coronagraph layers COR1 and COR2 are those of STEREO-B, which lost contact with Earth in October 2014. For events after that date, any panel can still be set to look from the position of STEREO-A entered as a longitude and latitude under `views`, but the COR1 and COR2 layers read only STEREO-B images.
 

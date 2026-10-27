@@ -107,3 +107,8 @@ In version 0.0.1, twenty-one statements of the README, METHODS.md, and the user 
 | Fields of view | `INSTR` | C2 2.2-6, COR1 1.5-4, COR2 4-15 R⊙ | choice | instrument fields, trimmed at the occulter edges | `test_plane_places_a_feature_in_3d` |
 | Binning | `NBIN` | about 256 pixels across | choice | | `test_small_images_are_not_binned_to_nothing` |
 | Panel framing | `views[].frame` | from the published figure | choice | layout of Morosan et al. (2022), Fig. 7 | none |
+| NRH image geometry | `nrh.py` | Sun centre at CRPIX (from 1), SOLAR_R pixels per R⊙, north up | sourced | NRH2 file headers (ROT_P = 1); Kerdraon & Delouis (1997) | `test_reader_places_a_source_at_its_sky_position` |
+| NRH source centroid | `nrh.source` | brightness-weighted, pixels above 0.5 of the peak | choice | | `test_reader_places_a_source_at_its_sky_position` |
+| NRH blobs | `radio_nrh` | one image per 60 s, peak ≥ 10⁸ K, coloured along a colour map per frequency | choice | the manner of Morosan et al. (2022), Fig. 7 | `test_radio_layer_draws_a_chain_of_blobs_per_frequency` |
+| Streamer lines drawn | `streamer_max_lines` | at most 150, an even subset; fainter with the radio layer | choice | | none |
+| Perspective option | `projection`, `camera_distance` | 6.65 R⊙ at the default framing | choice | the camera fitted to the published Fig. 7 | `test_perspective_projection_magnifies_the_near_side` |

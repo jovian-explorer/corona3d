@@ -5,6 +5,7 @@ by the CME shell (the streamer loops), a grey reference sphere, the GCS shell of
 sources at their Newkirk heights, and LASCO C2 and STEREO-B COR1, COR2 images, seen from Earth,
 the solar north pole, and STEREO-B (the layout of Fig. 7 of Morosan et al. 2022).
 """
+from datetime import timedelta
 from pathlib import Path
 
 import astropy.units as u
@@ -12,6 +13,7 @@ import numpy as np
 import pyvista as pv
 from matplotlib import cm, colors
 from matplotlib.figure import Figure
+from matplotlib import colormaps
 from scipy.spatial.transform import Rotation
 
 from . import mast_model
@@ -47,8 +49,8 @@ def radio_points(p):
     out = []
     for s in p["radio_sources"]:
         k = 1.0 / rs if s.get("unit") == "arcsec" else 1.0
-        out.append((s["freq"], deproject(np.atleast_1d(s["x"]) * k, np.atleast_1d(s["y"]) * k,
-                                         newkirk_r(s["freq"]), *p["earth"])))
+        xyz = deproject(np.atleast_1d(s["x"]) * k, np.atleast_1d(s["y"]) * k, newkirk_r(s["freq"]), *p["earth"])
+        out.append((s["freq"], xyz, np.tile(cm.cool(np.clip((s["freq"] - 150) / 300, 0, 1))[:3], (len(xyz), 1))))
     return out
 
 
@@ -108,9 +110,41 @@ def reconstruct(p=None, on=None, data_root="."):
         print(f"lines through the CME shell: {n[CLOSED]} closed, {n[OPEN]} open, "
               f"{len(lines) - n[OPEN] - n[CLOSED]} undetermined, of {len(lines)}")
     if on["radio"]:
-        sc["radio"] = radio_points(p)
+        sc["radio"], sc["radio_contours"] = radio_points(p), []
+        rn = p["radio_nrh"]
+        nrh_dir = Path(data_root) / rn["folder"]
+        if any(nrh_dir.glob("nrh2_*")):
+            from . import nrh
+            from .whitelight import utc
+            t0, t1 = utc(rn["start"]), utc(rn["end"])
+            for j, f in enumerate(rn["freqs"]):
+                h = newkirk_r(f)
+                cmap = colormaps[rn["colormaps"][j % len(rn["colormaps"])]]
+                blobs = []                                 # one per step between start and end
+                t = t0
+                while t <= t1:
+                    img, tf, x, y = nrh.image_at(nrh_dir, f, t)
+                    lines, (cx, cy), tb = nrh.source(img, x, y, rn["level"])
+                    if tb >= rn["min_tb"] and (not blobs or blobs[-1][0] != tf):
+                        blobs.append((tf, cx, cy, tb, lines))
+                    t += timedelta(seconds=rn["step_s"])
+                if not blobs:
+                    print(f"radio: NRH {f:g} MHz has no image above {rn['min_tb']:.1e} K "
+                          f"between {rn['start']} and {rn['end']}")
+                    continue
+                xy = np.array([(cx, cy) for _, cx, cy, _, _ in blobs])
+                xyz = deproject(xy[:, 0], xy[:, 1], h, *p["earth"])
+                colours = cmap(np.linspace(0, 1, len(blobs)))[:, :3]       # early to late
+                sc["radio"].append((f, xyz, colours))
+                if rn["contours"]:
+                    sc["radio_contours"].append((f, [deproject(c[:, 0], c[:, 1], h, *p["earth"], warn=False)
+                                                     for c in blobs[-1][4]]))
+                sc["times"].setdefault("radio", []).append((f, blobs[0][0], blobs[-1][0], len(blobs)))
+                for (tf, cx, cy, tb, _) in blobs:
+                    print(f"radio: NRH {f:g} MHz {tf:%H:%M:%S} UT, peak {tb:.2e} K, centroid "
+                          f"({cx:+.2f}, {cy:+.2f}) R_sun, at {h:.3f} R_sun")
         if not sc["radio"]:
-            print("radio: no radio_sources given, layer empty")
+            print("radio: no NRH images in", nrh_dir, "and no radio_sources given; layer empty")
     for inst in WL:
         if on[inst]:
             from .whitelight import INSTR, load_plane
@@ -131,7 +165,7 @@ def polyline(list_of_pts):
     return poly
 
 
-def render(sc, on, p, cam_dir, up, frame, owner, out, name):
+def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
     pl = pv.Plotter(off_screen=True, window_size=p["window"])
     pl.set_background("white")
     if on["sphere"]:
@@ -142,17 +176,24 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name):
                     smooth_shading=True, specular=0.1, show_scalar_bar=False)
     for key, kw in (("open", dict(color="black", line_width=2.5, opacity=0.08)),
                     ("closed", dict(color="#8c8c8c", line_width=2.5, opacity=0.12)),
-                    ("streamer", dict(color="#9a6fc0", line_width=4.0, opacity=0.85))):
+                    ("streamer", dict(color="#9a6fc0", line_width=3.0,
+                                      opacity=0.35 if sc.get("radio") and on["radio"] else 0.7))):
         if on[key] and sc[key]:
-            pl.add_mesh(polyline(sc[key]), **kw)
+            lines = sc[key]
+            if key == "streamer" and len(lines) > p["streamer_max_lines"]:    # an even subset
+                lines = [lines[i] for i in np.linspace(0, len(lines) - 1, p["streamer_max_lines"]).astype(int)]
+            pl.add_mesh(polyline(lines), **kw)
     if on["gcs"]:
         pl.add_mesh(polyline(list(sc["gcs"])), color=p["mesh_rings"]["color"],
                     line_width=p["mesh_rings"]["width"])
-    for f, xyz in (sc.get("radio", []) if on["radio"] else []):
-        c = cm.cool(np.clip((f - 150) / 300, 0, 1))[:3]
-        pl.add_mesh(pv.PolyData(xyz).glyph(geom=pv.Sphere(radius=p["radio_radius"]),
-                                           scale=False, orient=False),
-                    color=c, smooth_shading=True)
+    for f, lines in (sc.get("radio_contours", []) if on["radio"] else []):
+        if lines:
+            pl.add_mesh(polyline(lines), color=cm.cool(np.clip((f - 150) / 300, 0, 1))[:3], line_width=4.0)
+    for f, xyz, rgb in (sc.get("radio", []) if on["radio"] else []):
+        cloud = pv.PolyData(xyz)
+        cloud["rgb"] = (np.asarray(rgb) * 255).astype(np.uint8)
+        pl.add_mesh(cloud.glyph(geom=pv.Sphere(radius=p["radio_radius"]), scale=False, orient=False),
+                    scalars="rgb", rgb=True, smooth_shading=True, ambient=0.35, specular=0.4)
     # coronagraph planes only in a view from their own spacecraft
     for inst in IMAGES_OF.get(owner, ()):
         if on[inst]:
@@ -165,14 +206,22 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name):
     right = np.cross(up, cam_dir)
     right /= np.linalg.norm(right)
     focal = -(dx * right + dy * np.asarray(up))      # puts Sun centre at (dx, dy) in the panel
-    # orthographic projection: every depth is drawn at the scale of the plane of the sky, so that
-    # the model, the shell, and the coronagraph planes share one scale in R_sun
-    pl.enable_parallel_projection()
     pl.camera.focal_point = tuple(focal)
     pl.camera.up = tuple(up)
-    pl.camera.position = tuple(focal + 100.0 * np.asarray(cam_dir))
-    pl.camera.parallel_scale = half
-    pl.camera.clipping_range = (1.0, 250.0)
+    if p["projection"] == "perspective":
+        # the camera of the published figure: distance fixed at the default framing, so that a
+        # wider panel moves the camera back and keeps the perspective
+        D = p["camera_distance"] * half / (base_half or half)
+        pl.camera.position = tuple(focal + D * np.asarray(cam_dir))
+        pl.camera.view_angle = float(np.degrees(2 * np.arctan(half / D)))
+        pl.camera.clipping_range = (0.05, 10 * D)
+    else:
+        # orthographic projection: every depth is drawn at the scale of the plane of the sky, so
+        # that the model, the shell, and the coronagraph planes share one scale in R_sun
+        pl.enable_parallel_projection()
+        pl.camera.position = tuple(focal + 100.0 * np.asarray(cam_dir))
+        pl.camera.parallel_scale = half
+        pl.camera.clipping_range = (1.0, 250.0)
     img = pl.screenshot(str(out / f"{name}.png"), return_img=True)
     pl.close()
     return img
@@ -246,16 +295,19 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
         name = names.get(v.get("from")) or f"lon {v['lon']:g}°, lat {v['lat']:g}°"
         titles.append(v.get("title") or f"{'abc'[i]}. {name}")
         owners.append(owner)
-        imgs.append(render(sc, on, p, d, up, (h, fr[1], fr[2]), owner, out.parent, f"view_{'abc'[i]}"))
+        imgs.append(render(sc, on, p, d, up, (h, fr[1], fr[2]), owner, out.parent, f"view_{'abc'[i]}", fr[0]))
 
     t = sc["times"]
     notes = [[f"model {p['run'].split('/')[0]}, shell {str(t['shell'])[11:16]} UT"] for _ in imgs]
+    for i in range(len(notes)):
+        for f, ta, tb_, n in t.get("radio", []):
+            notes[i].append(f"NRH {f:g} MHz, {n} images {ta:%H:%M:%S}-{tb_:%H:%M:%S} UT")
     for i, owner in enumerate(owners):
         for inst in IMAGES_OF.get(owner, ()):
             if inst in t:
                 tf, tb = t[inst]
                 notes[i].append(f"{inst.upper()} {tf:%H:%M} vs {tb:%H:%M} UT ({p['wl_mode']})")
-    fig = Figure(figsize=(16, 5.6))           # no GUI backend: drawn off screen
+    fig = Figure(figsize=(16, 4.9))           # no GUI backend: drawn off screen
     for i, (title, img) in enumerate(zip(titles, imgs)):
         ax = fig.add_axes([0.005 + i * 0.333, 0.17, 0.325, 0.81])
         ax.imshow(img)
@@ -264,8 +316,8 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
         ax.text(0.01, 0.985, lab, transform=ax.transAxes, fontsize=15, va="top")
         ax.text(0.06, 0.97, txt, transform=ax.transAxes, fontsize=15, va="top",
                 bbox=dict(fc="white", ec="none", alpha=0.85))
-        ax.text(0.01, 0.015, "\n".join(notes[i]), transform=ax.transAxes, fontsize=9,
-                va="bottom", bbox=dict(fc="white", ec="none", alpha=0.85))
+        ax.text(0.99, 0.985, "\n".join(notes[i]), transform=ax.transAxes, fontsize=8, va="top",
+                ha="right", bbox=dict(fc="white", ec="none", alpha=0.7))
     if on["surface"]:
         cax = fig.add_axes([0.40, 0.07, 0.24, 0.05])
         cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(*p["va_range"]), "Spectral_r"),
