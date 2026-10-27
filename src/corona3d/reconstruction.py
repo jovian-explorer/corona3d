@@ -263,10 +263,12 @@ def view_geometry(v, p):
 
 
 def parse_view(text):
-    """'b=north', 'a=earth', or 'c=300,20[,roll]' -> (panel index, view entry)."""
+    """'b=north', 'a=earth', 'c=stereo' (also the legacy 'c=stereo_a' and 'c=stereo_b'), or 'c=300,20[,roll]' -> (panel index, view entry)."""
     k, val = text.split("=", 1)
     i = "abc".index(k.strip().lower())
     val = val.strip()
+    if val in ("stereo_a", "stereo_b"):                # legacy names: the STEREO spacecraft
+        return i, {"from": "stereo", "sc": val[-1].upper()}
     if val in ("earth", "stereo", "north"):
         return i, {"from": val}
     nums = [float(x) for x in val.split(",")]

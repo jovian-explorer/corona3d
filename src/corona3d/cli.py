@@ -9,6 +9,16 @@ from . import __version__, fetch, paths
 from .layers import LAYERS, ON
 
 
+def gcs_views(text):
+    """Instrument list of --views with the legacy names stereo_a and stereo_b expanded to the COR1 and
+    COR2 of that spacecraft; returns the comma-separated text."""
+    out = []
+    for k in text.split(","):
+        k = k.strip()
+        out += [f"cor1{k[-1]}", f"cor2{k[-1]}"] if k in ("stereo_a", "stereo_b") else [k]
+    return ",".join(dict.fromkeys(out))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="corona3d", description="Three-dimensional reconstruction of a CME "
                                  "and the corona from public MHD, coronagraph, and radio data")
@@ -40,7 +50,9 @@ def main(argv=None):
     g.add_argument("--t-out", help="time of the reconstruction (default: time of config.json)")
     g.add_argument("--flare", nargs=2, type=float, metavar=("LON", "LAT"),
                    help="Stonyhurst longitude and latitude of the flare site [deg] that seeds the envelopes")
-    g.add_argument("--views", default="c2,cor1a,cor1b", help="instruments: c2, cor1a, cor1b, cor2a, cor2b")
+    g.add_argument("--views", default="c2,cor1a,cor1b", type=gcs_views,
+                   help="instruments: c2, cor1a, cor1b, cor2a, cor2b (legacy stereo_a and stereo_b stand for "
+                        "cor1a,cor2a and cor1b,cor2b)")
     g.add_argument("--fix-direction", action="store_true",
                    help="keep the shell axis at the flare site; fit height, aspect ratio, half-angle, and tilt")
     g.add_argument("--front", help="instrument of the height-time profile (default: the limb view)")
@@ -64,7 +76,7 @@ def main(argv=None):
                     help="mean intersection over union below which a fit is poor (default 0.5)")
     ev.add_argument("--height-out", type=float, metavar="R_SUN", help="apex height at --time given by hand")
     ev.add_argument("--height-note", help="reason for --height-out (required with it)")
-    ev.add_argument("--views", help="instruments of the fit (default: c2, cor1 and cor2 of the STEREO spacecraft)")
+    ev.add_argument("--views", type=gcs_views, help="instruments of the fit (default: c2, cor1 and cor2 of the STEREO spacecraft)")
     ev.add_argument("--t-ref", help="time of the six-parameter fit (default: the gcs_wl time of config.json)")
     ev.add_argument("--radio-search", type=float, default=10.0, metavar="MINUTES",
                     help="radio images are searched within MINUTES of --time (default 10)")
@@ -163,6 +175,9 @@ def main(argv=None):
         views = [dict(v) for v in cfg["views"]]
         for text in a.view:
             i, v = parse_view(text)
+            sc = v.pop("sc", None)                     # legacy stereo_a / stereo_b
+            if sc and sc != cfg["stereo_sc"]:
+                sys.exit(f"--view {text}: this event uses STEREO-{cfg['stereo_sc']} (config.json stereo_sc)")
             views[i] = dict(v, frame=views[i].get("frame", [1.6, 0.0, 0.0]) if "from" in v and
                             v["from"] == views[i].get("from") else [1.6, 0.0, 0.0])
         params["views"] = views

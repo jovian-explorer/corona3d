@@ -268,3 +268,19 @@ def test_ovro_lwa_is_fetched_once_for_the_search_window(world, monkeypatch):
     pipeline.run(world.home, a, lambda s: None)
     pipeline.run(world.home, a, lambda s: None)
     assert len(windows) == 1 and windows[0][1] == ("2024-05-09T17:22:00", "2024-05-09T17:42:00")
+
+
+def test_t_ref_also_sets_wl_time_and_is_recorded_in_the_provenance(world):
+    run(world, t_ref="2013-10-25T16:05")
+    cfg = config(world.home)
+    assert cfg["wl_time"] == "2013-10-25T16:05"
+    assert cfg["gcs_fit"]["wl_time"] == "2013-10-25T16:05" and cfg["gcs_fit"]["wl_time_from"] == "--t-ref"
+    assert world.fits[0][1] == "2013-10-25T16:05"
+    run(world, fit="skip", t_ref="2013-10-25T16:10")                 # also without a fit
+    assert config(world.home)["wl_time"] == "2013-10-25T16:10"
+
+
+def test_without_t_ref_wl_time_is_left_alone(world):
+    run(world)
+    assert config(world.home)["wl_time"] == new_config("2013-10-25T15:00", "S06E69")["wl_time"]
+    assert "wl_time_from" not in config(world.home)["gcs_fit"]

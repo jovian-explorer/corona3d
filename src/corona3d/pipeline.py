@@ -185,6 +185,9 @@ def run(h, a, log=print):
         else:
             step("gcs", "no fit succeeded; the shell of config.json is used")
             failed.append("GCS fit")
+    if a.t_ref:                                   # the white-light figure uses frames of the time of the fit
+        gcs.set_wl_time(h, a.t_ref)
+        step("wl_time", f"set to {a.t_ref} (--t-ref)")
     _save_state(h, st)
     cfg = paths.config(h)
 

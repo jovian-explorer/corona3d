@@ -97,3 +97,15 @@ def test_running_difference_takes_the_frame_nearest_to_t_minus_the_interval(monk
     assert G.base_of(fr, {("cor1a", "s4"): "first"}, "cor1a", t, fr["cor1a"][4][1], None) == "first"
     assert G.base_of(fr, {}, "cor1a", t, fr["cor1a"][4][1], 10) == "x_s4c1A_2"
     assert G.base_of(fr, {}, "cor1a", t0, fr["cor1a"][0][1], 10) is None
+
+
+@needs_tree
+def test_gcs_t_ref_sets_wl_time_and_the_provenance(tmp_path, monkeypatch):
+    main(["--home", str(tmp_path), "init"])
+    monkeypatch.setattr(G, "fit", fake_fit)
+    main(["--home", str(tmp_path), "gcs", "--t-ref", "2013-10-25T15:30"])
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    assert cfg["wl_time"] == "2013-10-25T15:30"
+    assert cfg["gcs_fit"]["wl_time"] == "2013-10-25T15:30" and cfg["gcs_fit"]["wl_time_from"] == "--t-ref"
+    main(["--home", str(tmp_path), "gcs"])                          # no --t-ref: wl_time stays as it is
+    assert json.loads((tmp_path / "config.json").read_text())["wl_time"] == "2013-10-25T15:30"

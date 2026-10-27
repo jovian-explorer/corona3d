@@ -1,6 +1,20 @@
 # corona3d user guide
 
-This guide describes corona3d as it is in this repository: how to install it and prepare a working directory, how the public data are downloaded, what each layer of the reconstruction shows and how it is switched on or off, how the viewpoint of each panel is chosen, how every parameter of the configuration acts on the figure, how corona3d is used from Python, how far its results can be trusted, and what to do when something does not work. Moreover, the computation behind each layer is described with its sources in [METHODS.md](../METHODS.md), every method and number is listed with its source and its test in [MODEL_AUDIT.md](MODEL_AUDIT.md), and the changes between versions are recorded in [CHANGELOG.md](../CHANGELOG.md).
+This guide describes corona3d as it is in this repository: how to install it and prepare a working directory, how the public data are downloaded, what each layer of the reconstruction shows and how it is switched on or off, how the viewpoint of each panel is chosen, how every parameter of the configuration acts on the figure, how corona3d is used from Python, how far its results can be trusted, and what to do when something does not work. Moreover, the computation behind each layer is described with its sources in [METHODS.md](METHODS.md), every method and number is listed with its source and its test in [MODEL_AUDIT.md](MODEL_AUDIT.md), and the changes between versions are recorded in [CHANGELOG.md](../CHANGELOG.md). Where the results cannot be trusted is stated in [LIMITATIONS.md](LIMITATIONS.md).
+
+## At a glance
+
+| Task | Command |
+|---|---|
+| Everything for one event, from its time and flare position | `corona3d event --time T --flare S14W28` |
+| The default event of Morosan et al. (2022) | `corona3d init`, `corona3d fetch`, `corona3d render` |
+| Download the data only | `corona3d fetch [--model] [--wl] [--cor1a] [--ovro-lwa] [--nrh]` |
+| Fit the CME shell | `corona3d gcs --t-ref T --t-out T --flare LON LAT` |
+| Choose the radio interval from the images | `corona3d radio-interval` |
+| Draw figures | `corona3d render [--<layer>] [--view PANEL=VIEW]` |
+| Write the layers as data files | `corona3d export [--format npz, csv, or vtk]` |
+
+The sections below describe each command and its options, Section 7 lists the keys of `config.json`, and Section 8 describes the Python interface and the export formats with their metadata.
 
 Contents
 
@@ -207,7 +221,7 @@ corona3d render --view c=300,20,45      # the same, turned by 45 degrees
 corona3d render --view a=stereo --view c=earth
 ```
 
-The panels are labelled a, b, and c from left to right. A panel set with `--view` to a longitude and latitude uses the framing `[1.6, 0, 0]`, whereas a panel set to the observer it already had keeps its framing.
+The legacy names `stereo_a` and `stereo_b` are accepted by `--view` as `stereo`, provided that they name the spacecraft of `stereo_sc`; a name for the other spacecraft is refused with a message, since it would silently change the observer. The panels are labelled a, b, and c from left to right. A panel set with `--view` to a longitude and latitude uses the framing `[1.6, 0, 0]`, whereas a panel set to the observer it already had keeps its framing.
 
 ## 7. The configuration file
 
@@ -342,10 +356,10 @@ fits the GCS shell to the images in `data/wl/` of the working directory in the t
 | Option | Effect |
 |---|---|
 | `--wl DIR` | folder of the images (default `data/wl` of the working directory) |
-| `--t-ref T` | time of the six-parameter fit (default: the `gcs_wl` time of the configuration) |
+| `--t-ref T` | time of the six-parameter fit (default: the `gcs_wl` time of the configuration); it also sets `wl_time` of `config.json` to this time and records it in `gcs_fit` (`wl_time`, `wl_time_from` = `"--t-ref"`), so that the coronagraph figure is drawn at the time of the fit, for example at 17:55 UT on 2024 May 9, when LASCO C2 has no frame between 14:48 and 18:52 UT |
 | `--t-out T` | time of the reconstruction (default: `time` of the configuration) |
 | `--flare LON LAT` | Stonyhurst longitude and latitude of the flare site in degrees, which seeds the envelopes (default: the site of the previous fit, otherwise the direction of the shell in the configuration; S06E69 for the default event) |
-| `--views LIST` | instruments, from `c2`, `cor1a`, `cor1b`, `cor2a`, `cor2b` (default `c2,cor1a,cor1b`) |
+| `--views LIST` | instruments, from `c2`, `cor1a`, `cor1b`, `cor2a`, `cor2b` (default `c2,cor1a,cor1b`); the legacy names `stereo_a` and `stereo_b` are accepted and stand for `cor1a,cor2a` and `cor1b,cor2b` |
 | `--fix-direction` | keeps the axis of the shell at the flare site and fits only the height, the aspect ratio, the half-angle, and the tilt |
 | `--front INSTR` | instrument of the height-time profile (default: the instrument that sees the CME most nearly at the limb) |
 | `--running-diff MINUTES` | builds the envelopes from running differences, each frame minus the frame of the same observing programme nearest to MINUTES earlier, instead of the difference from the first frame; useful when earlier ejecta or a slow rise leave no signal against the first frame |
@@ -385,13 +399,13 @@ corona3d event --time 2024-05-09T17:32 --flare S14W28 [--home DIR] [--fit auto|f
 1. `new` writes `config.json` from `--time` and `--flare` (Section 9.2) when it does not exist; a `config.json` of another time stops the command.
 2. `fetch` downloads the model run, the white-light images, and, from 2024 April onward, the OVRO-LWA images of the search window of `--radio-search` minutes (default 10), so that the interval can be chosen from them, and it checks the NRH files (Section 3).
 3. `radio-interval` chooses the burst interval as described above.
-4. `gcs` fits the shell to the coronagraph images of `--views` (default C2, COR1, and COR2 of the spacecraft of `stereo_sc`, each when its images exist) at `--t-ref` (default the `gcs_wl` time of `config.json`). With `--fit auto`, the free fit comes first, and the fit with the direction held at the flare site (Section 9.3, `--fix-direction`) follows when the free fit fails, for instance because the CME envelope is not found, or when it is poor. A fit is poor when the mean IoU over the instruments is below `--iou-min` (default 0.5), when no instrument gave an envelope, or when a fitted parameter lies within 0.5 % of its range from a bound of the optimisation. The fixed-direction fit replaces a poor free fit even when it is poor as well, and the report states both outcomes. `--fit fixed` runs only the fixed-direction fit, and `--fit skip` keeps the shell of `config.json`. `--height-out` with `--height-note` gives the apex height by hand as in Section 9.3.
+4. `gcs` fits the shell to the coronagraph images of `--views` (default C2, COR1, and COR2 of the spacecraft of `stereo_sc`, each when its images exist) at `--t-ref` (default the `gcs_wl` time of `config.json`). With `--fit auto`, the free fit comes first, and the fit with the direction held at the flare site (Section 9.3, `--fix-direction`) follows when the free fit fails, for instance because the CME envelope is not found, or when it is poor. A fit is poor when the mean IoU over the instruments is below `--iou-min` (default 0.5), when no instrument gave an envelope, or when a fitted parameter lies within 0.5 % of its range from a bound of the optimisation. The fixed-direction fit replaces a poor free fit even when it is poor as well, and the report states both outcomes. `--fit fixed` runs only the fixed-direction fit, and `--fit skip` keeps the shell of `config.json`. `--height-out` with `--height-note` gives the apex height by hand as in Section 9.3. `--t-ref` sets the time of the fit and, as in Section 9.3, also `wl_time`.
 5. `render` draws the default figure (`figures/corona3d.png`), the figure with the coronagraph images that exist (`figures/wl/corona3d.png`, as with `--c2`, `--cor1`, and `--cor2`), and the figure with the radio sources (`figures/radio/corona3d.png`, as with `--radio`) when radio files exist. A figure without data is skipped, and the rendering defaults are those of Section 4.
 6. `report` writes `event_report.md`.
 
 Every step can be repeated. The file `event_state.json` of the working directory records the downloads and the fit, a fit is repeated only when the flare, the times, or the height given by hand differ from the recorded fit, and a figure is drawn again only when it is older than `config.json`. `--force` repeats the downloads, the fit, and the figures. The command ends with exit code 1 when a download, the fit, or a figure failed, and the report names the failure.
 
-`event_report.md` has five sections. *Measured* lists the fitted shell with its parameters, the apex height when it was extrapolated from the front, and the radio intervals chosen from the images. *Assumed* lists, with the reason of each, what the data do not give: a height given by hand, an axis held at the flare site, the steady-state MAS/MAST corona, the Newkirk placement of the radio sources, and a radio interval that remained the default window. *Missing data* lists the absent model files, coronagraph images, and radio files (with the manual step for the NRH), the frequencies without a burst, and the steps that failed. *Fit quality* gives the outcome of each fit and the IoU per instrument. *Figures* lists the figures drawn. The figure with the coronagraph images cannot be drawn when no image precedes the chosen time; for 2024 May 9, for example, the LASCO C2 files obtained cover only 14:48 UT and the period from 18:52 UT, so that the report names this failure and a later `wl_time` is needed.
+`event_report.md` has five sections. *Measured* lists the fitted shell with its parameters, the apex height when it was extrapolated from the front, and the radio intervals chosen from the images. *Assumed* lists, with the reason of each, what the data do not give: a height given by hand, an axis held at the flare site, the steady-state MAS/MAST corona, the Newkirk placement of the radio sources, and a radio interval that remained the default window. *Missing data* lists the absent model files, coronagraph images, and radio files (with the manual step for the NRH), the frequencies without a burst, and the steps that failed. *Fit quality* gives the outcome of each fit and the IoU per instrument. *Figures* lists the figures drawn. The figure with the coronagraph images cannot be drawn when no image precedes the chosen time; for 2024 May 9, for example, the LASCO C2 files obtained cover only 14:48 UT and the period from 18:52 UT, so that the report names this failure together with the nearest frame times (the same message is given by `corona3d render`, when the nearest frame is more than 30 min from `wl_time`), and `--t-ref` with a time that has a frame sets `wl_time` to it.
 
 ## 10. How the results were checked
 
@@ -410,7 +424,7 @@ The offline tests run with `python -m pytest` in a copy of the repository, take 
 * the viewpoints face the expected directions;
 * damaged and partial downloads are detected and removed.
 
-The online test (`CORONA3D_ONLINE=1 python -m pytest`) downloads the public data of 2013 October 25 into a temporary working directory and draws both figures of the README. The list of checks, together with the tolerances, is given in METHODS.md, Section 10, and in [MODEL_AUDIT.md](MODEL_AUDIT.md). Moreover, both figures of the README were drawn from a new working directory after `corona3d init` and `corona3d fetch`, with the C2, COR1, and COR2 frames printed in Section 5.6.
+The online test (`CORONA3D_ONLINE=1 python -m pytest`) downloads the public data of 2013 October 25 into a temporary working directory and draws both figures of the README. The list of checks, together with the tolerances, is given in METHODS.md, Section 11, and in [MODEL_AUDIT.md](MODEL_AUDIT.md). Moreover, both figures of the README were drawn from a new working directory after `corona3d init` and `corona3d fetch`, with the C2, COR1, and COR2 frames printed in Section 5.6.
 
 ## 11. Differences from Morosan et al. (2022) and limits of the results
 
@@ -433,6 +447,7 @@ To cite corona3d itself, use [CITATION.cff](../CITATION.cff), to which a DOI wil
 | `... is not a corona3d working directory (no config.json)` | The command was given outside a working directory; run `corona3d init` there first, or give `--home` |
 | `FileNotFoundError: rho002, ... .hdf missing in ...; run corona3d fetch --model` | The model run has not been downloaded, or not completely; run `corona3d fetch --model` |
 | `FileNotFoundError: no c2 frames between ... ; run corona3d fetch --wl` | The white-light images have not been downloaded, or `wl_window` contains no frame of the instrument; run `corona3d fetch --wl` |
+| `ValueError: no ... frame within 30 min of wl_time ...` | The images have a gap at `wl_time`; the message names the nearest frame times, and `wl_time` (or `--t-ref`) must be set to one of them |
 | `ValueError: wl_time ... lies outside wl_window` or `... is the base frame itself` | Choose a `wl_time` inside the window and after its first frame |
 | `corona3d fetch` reports failed or damaged files and ends with exit code 1 | Give the command again; complete files are skipped and the missing ones downloaded |
 | `ImportError` for `pyhdf`, or pip fails to build pyhdf | No wheel for the system; install HDF4 (`brew install hdf4` on macOS) or use `conda install -c conda-forge pyhdf` |

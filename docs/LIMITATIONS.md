@@ -1,0 +1,41 @@
+# Limitations of corona3d
+
+The reconstruction of corona3d combines a model of the corona before the CME, a geometrical shell fitted to white-light images, and radio positions that are measured in the plane of the sky. Each of these inputs has a known range of validity, and this document states where that range ends so that a result can be judged before it is used in a publication. The methods themselves are described in [METHODS.md](METHODS.md), and `corona3d event` writes the limitations that apply to one event into its `event_report.md`.
+
+## 1. Halo CMEs and the direction of the shell
+
+The free fit of the six GCS parameters (Thernisien et al. 2006; Thernisien 2011) needs a CME whose envelope has a well-defined outline in at least two viewpoints. A halo CME, which is directed nearly along the line of sight of the observer, appears as a ring around the occulter in that viewpoint, and the fit then constrains the height and the direction only weakly. Moreover, the front of such a CME cannot be measured in the plane of the sky of that instrument, and the extrapolation of the apex height to the earlier time (Section 7.2 of METHODS.md) relies on a limb view. In these cases `corona3d event` falls back to the fit with the direction held at the flare site, and the shell then has the direction that the user supplied and not one that was measured. The report names the fallback, and the fit quality is stated with the intersection over union (IoU) in each instrument.
+
+## 2. Gaps in the data
+
+The white-light images of an instrument may be absent for an interval, as happened for LASCO C2 on 2024 May 9, when no frame exists between 14:48 and 18:52 UT. A rendering with a `wl_time` inside such a gap is refused when the nearest frame is more than 30 min away, and the error and the report give the nearest frame times before and after it. The option `--t-ref` of `corona3d gcs` and `corona3d event` then sets `wl_time` to the time of the fit. A gap also removes frames from the height-time profile of the front, so that fewer than two usable fronts may remain and the extrapolation cannot be made. In that case the apex height at the time of the reconstruction has to be given by hand with `--height-out` and `--height-note`, and it is recorded as assumed.
+
+## 3. Small separation between Earth and the STEREO spacecraft
+
+The shell is fitted to images from more than one viewpoint, and the direction of a CME is well constrained only when these viewpoints are separated by a sufficiently large angle. In 2013 the separation of Earth and STEREO-B was 142°, whereas STEREO-A and Earth were separated by only about 12° in Carrington longitude on 2024 May 9 (317.2° and 329.6°), so that the C2 and COR images then see the CME nearly from the same side. The direction obtained from such a pair of viewpoints is degenerate along the common line of sight, and the fit with a fixed direction is the more reliable choice.
+
+## 4. Assumed heights
+
+Where the front cannot be measured at the time of the reconstruction, the apex height is an assumption. The height extrapolated from a measured front assumes a constant speed between the measured frames and the reconstruction time, and an accelerating CME moves more slowly early in its rise, so that the true height may be lower. A height given by hand with `--height-out` is a kinematic estimate of the user, which corona3d records in `gcs_fit` (`"height_source": "assumed"`) and lists under the assumptions of the report.
+
+## 5. Radio sources and the manual step for the NRH
+
+The 2-D images of the Nançay Radioheliograph (NRH) cannot be downloaded automatically. The BASS2000 archive provides only four snapshots per day at 164 and 327 MHz, movies, and visibility files, which can be imaged only with the NRH routines of the IDL SolarSoft package, and the 10 s images are delivered by the Radio Solar Database at Nançay (https://rsdb.obs-nancay.fr/) after a request. The user must therefore request the Stokes I images for the frequencies and the interval of the event and copy them into `data/nrh/`; `corona3d fetch --nrh` reports which frequencies the files cover. The images of OVRO-LWA, in contrast, are public from 2024 April onward and are downloaded by `corona3d fetch --ovro-lwa`.
+
+The radio positions are placed at the heights of the four-fold Newkirk model for emission at the second harmonic, on the side of the plane of the sky that faces the observer. Both choices are assumptions. The true height depends on the density along the line of sight, on the harmonic, and on the scattering of the radio waves, which displaces observed sources outward and is not corrected, and a source cannot be placed at its height when its sky-plane position lies farther from Sun centre than that height. The centroid of a source has an uncertainty of about one pixel of the image.
+
+## 6. Resolution and age of the coronal model
+
+The MAS/MAST run is a steady-state model of the corona on a mesh of finite resolution, computed for one Carrington rotation from the magnetogram of one date. It does not contain the CME, so that the field lines and the density surface show the corona that the CME meets, without its deformation, and it may differ from the real corona at the time of the event. Structures smaller than a few cells of the mesh are not resolved, and the field lines, the density surface, and the Alfvén speed depend on the resolution of the run chosen with `run`. For the default event, the run that Morosan et al. (2022) used is no longer served by PSI, and the public run agrees with their density surface in outline but not in every detail. The density scale of 2 is a choice that follows their paper and is not derived from the model.
+
+## 7. Coronagraph images
+
+The coronagraph images are level 0.5 and are not calibrated photometrically, so that the ratio or difference against the first frame of the window is a relative change that is suited to the comparison of positions and not to estimates of brightness or mass. Each image is drawn in the plane of the sky of its own spacecraft, which is exact only when seen from that spacecraft; seen from another viewpoint, the plane shows only where the image lies and not the three-dimensional structure of the CME.
+
+## References
+
+Morosan, D. E., Pomoell, J., Kumari, A., Vainio, R., & Kilpua, E. K. J. 2022, Astronomy & Astrophysics, 668, A15. https://doi.org/10.1051/0004-6361/202244432
+
+Thernisien, A. F. R., Howard, R. A., & Vourlidas, A. 2006, The Astrophysical Journal, 652, 763. https://doi.org/10.1086/508254
+
+Thernisien, A. 2011, The Astrophysical Journal Supplement Series, 194, 33. https://doi.org/10.1088/0067-0049/194/2/33

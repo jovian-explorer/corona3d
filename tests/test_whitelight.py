@@ -111,3 +111,15 @@ def test_cor1_triplets_of_the_normal_sequence_are_read(tmp_path):
         fits.PrimaryHDU(np.zeros((2, 2)), h).writeto(tmp_path / f"20240509_{s}_n4c1A.fts")
     fr = _frames(tmp_path, "cor1", "A")
     assert len(fr) == 1 and len(fr[0][1]) == 3 and _frames(tmp_path, "cor1", "B") == []
+
+
+def test_a_gap_in_the_frames_is_refused_and_the_nearest_frame_times_are_named(tmp_path):
+    _pair(tmp_path)                                         # frames at 14:39:51 and 15:24:51
+    wide = ["2013-10-25T14:35", "2013-10-25T18:00"]
+    with pytest.raises(ValueError, match=r"within 30 min.*2013-10-25T15:24:51 \(before\)"):
+        load_plane("cor2", tmp_path, "2013-10-25T17:55", OBS, wide)
+    with pytest.raises(FileNotFoundError, match=r"nearest available frames: 2013-10-25T15:24:51 \(before\)"):
+        load_plane("cor2", tmp_path, "2013-10-25T17:55", OBS, ["2013-10-25T17:00", "2013-10-25T18:00"])
+    _write(tmp_path, "20131025_175900_d4c2B.fts", "2013-10-25T17:59:51", roll=0.0)
+    with pytest.raises(ValueError, match=r"15:24:51 \(before\) and 2013-10-25T17:59:51 \(after\)"):
+        load_plane("cor2", tmp_path, "2013-10-25T16:40", OBS, wide)

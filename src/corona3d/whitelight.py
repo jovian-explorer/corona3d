@@ -74,18 +74,33 @@ def _image(files, shape=None):
     return m
 
 
+WL_MAX_GAP_MIN = 30.0      # a frame farther than this from wl_time is not used
+
+
+def nearest_times(frames, t):
+    """Text naming the frame times of `frames` ([(time, files)]) just before and just after t."""
+    before = [f[0] for f in frames if f[0] <= t]
+    after = [f[0] for f in frames if f[0] > t]
+    parts = ([f"{max(before):%Y-%m-%dT%H:%M:%S} (before)"] if before else []) +             ([f"{min(after):%Y-%m-%dT%H:%M:%S} (after)"] if after else [])
+    return "nearest available frames: " + (" and ".join(parts) if parts else "none in the folder")
+
+
 def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B"):
     """Plane of one instrument at the frame nearest to `when`, compared with the first frame of
     `window` ([start, end]); returns (grid, frame time, base time)."""
     t0, t1 = utc(window[0]), utc(window[1])
-    frames = [f for f in _frames(wl_dir, inst, sc) if t0 <= f[0] <= t1]
-    if not frames:
-        raise FileNotFoundError(f"no {inst} frames between {window[0]} and {window[1]} in {wl_dir}; "
-                                "run `corona3d fetch --wl`")
+    every = _frames(wl_dir, inst, sc)
+    frames = [f for f in every if t0 <= f[0] <= t1]
     t = utc(when)
+    if not frames:
+        raise FileNotFoundError(f"no {inst} frames between {window[0]} and {window[1]} in {wl_dir} "
+                                f"({nearest_times(every, t)}); run `corona3d fetch --wl`")
     if not t0 <= t <= t1:
         raise ValueError(f"wl_time {when} lies outside wl_window {window}")
     tf, files = min(frames, key=lambda fr: abs(fr[0] - t))
+    if abs((tf - t).total_seconds()) > 60 * WL_MAX_GAP_MIN:
+        raise ValueError(f"no {inst} frame within {WL_MAX_GAP_MIN:g} min of wl_time {when} ({nearest_times(every, t)}); "
+                         "set wl_time (or --t-ref) to one of them")
     if tf == frames[0][0]:
         raise ValueError(f"the {inst} frame nearest to {when} is the base frame itself ({tf}); "
                          "choose a later wl_time")

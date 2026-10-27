@@ -150,3 +150,17 @@ def test_perspective_projection_magnifies_the_near_side(tmp_path):
         make_figure(f"{proj}/f.png", tmp_path, params={"projection": proj}, **off)
         r[proj] = _disc_radius(tmp_path / proj / "view_b.png")
     assert 1.005 < r["perspective"] / r["orthographic"] < 1.4      # the limb lies slightly nearer
+
+
+def test_legacy_stereo_view_names_are_accepted(tmp_path, monkeypatch):
+    from corona3d import cli, reconstruction
+    from corona3d.reconstruction import parse_view
+    assert parse_view("c=stereo_b") == (2, {"from": "stereo", "sc": "B"})
+    assert cli.gcs_views("c2,stereo_b") == "c2,cor1b,cor2b" and cli.gcs_views("stereo_a,cor1a") == "cor1a,cor2a"
+    main(["--home", str(tmp_path), "init"])                          # 2013 event: STEREO-B
+    seen = {}
+    monkeypatch.setattr(reconstruction, "make_figure", lambda out, h, half, params, **k: seen.update(params))
+    main(["--home", str(tmp_path), "render", "--view", "c=stereo_b"])
+    assert seen["views"][2]["from"] == "stereo" and "sc" not in seen["views"][2]
+    with pytest.raises(SystemExit, match="STEREO-B"):
+        main(["--home", str(tmp_path), "render", "--view", "c=stereo_a"])

@@ -357,6 +357,8 @@ def run(home, cfg, a):
     out = fit(a.wl or wl_dir(home), t_ref, t_out, flare, keys, a.fix_direction, a.front, previous,
               a.running_diff, a.height_out, a.height_note)
     write_result(home, out, flare, keys, a.fix_direction, a.running_diff)
+    if a.t_ref:
+        set_wl_time(home, a.t_ref)
 
 
 def write_result(home, out, flare, keys, fix_direction=False, running=None):
@@ -368,3 +370,16 @@ def write_result(home, out, flare, keys, fix_direction=False, running=None):
     user.update(config_update(out, flare, keys, fix_direction, running))
     f.write_text(json.dumps(user, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {out_file} and the keys gcs, gcs_wl, and gcs_fit of {f}")
+
+
+def set_wl_time(home, t_ref):
+    """Set `wl_time` of config.json to the time given as --t-ref, so that the white-light figure uses
+    frames of the time of the fit (a coronagraph can have a gap, as LASCO C2 on 2024-05-09 from 14:48
+    to 18:52 UT), and record this in the `gcs_fit` provenance (`wl_time`, `wl_time_from`)."""
+    f = Path(home) / "config.json"
+    user = json.loads(f.read_text(encoding="utf-8"))
+    user["wl_time"] = t_ref
+    if "gcs_fit" in user:
+        user["gcs_fit"] = dict(user["gcs_fit"], wl_time=t_ref, wl_time_from="--t-ref")
+    f.write_text(json.dumps(user, indent=2) + "\n", encoding="utf-8")
+    print(f"wl_time of {f} set to {t_ref} (--t-ref)")
