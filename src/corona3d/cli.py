@@ -5,11 +5,11 @@ import shutil
 from importlib.resources import files
 
 from . import __version__, fetch, paths
-from .scene import LAYERS, ON, make_figure
+from .reconstruction import LAYERS, ON, make_figure
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="corona3d", description="Three-dimensional coronal scene of a CME "
+    ap = argparse.ArgumentParser(prog="corona3d", description="Three-dimensional reconstruction of a CME and the corona "
                                  "from public MHD, coronagraph and radio data")
     ap.add_argument("--version", action="version", version=f"corona3d {__version__}")
     ap.add_argument("--home", help="working directory (default: CORONA3D_HOME or the current folder)")

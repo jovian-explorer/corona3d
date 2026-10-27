@@ -1,5 +1,5 @@
 name: Feedback or suggestion
-description: Comments on the scene, the layers, other events or models, documentation
+description: Comments on the reconstruction, the layers, other events or models, documentation
 labels: [feedback]
 body:
   - type: textarea

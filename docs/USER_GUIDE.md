@@ -1,13 +1,13 @@
 # corona3d user guide
 
-This guide describes corona3d as it is in this repository: how to install it and prepare a working directory, how the public data are downloaded, what each layer of the scene shows and how it is switched on or off, how every parameter of the configuration acts on the figure, how corona3d is used from Python, how far its results can be trusted, and what to do when something does not work. The computation behind each layer, with its sources, is described in [METHODS.md](../METHODS.md), and the changes between versions are recorded in [CHANGELOG.md](../CHANGELOG.md).
+This guide describes corona3d as it is in this repository: how to install it and prepare a working directory, how the public data are downloaded, what each layer of the reconstruction shows and how it is switched on or off, how every parameter of the configuration acts on the figure, how corona3d is used from Python, how far its results can be trusted, and what to do when something does not work. The computation behind each layer, with its sources, is described in [METHODS.md](../METHODS.md), and the changes between versions are recorded in [CHANGELOG.md](../CHANGELOG.md).
 
 Contents
 
 1. [Install and start](#1-install-and-start)
 2. [The working directory](#2-the-working-directory)
 3. [Downloading the data](#3-downloading-the-data)
-4. [Drawing the scene](#4-drawing-the-scene)
+4. [Drawing the figure](#4-drawing-the-figure)
 5. [The layers](#5-the-layers)
 6. [The configuration file](#6-the-configuration-file)
 7. [Using corona3d from Python](#7-using-corona3d-from-python)
@@ -80,13 +80,13 @@ The model run is downloaded from the archive of Predictive Science Inc. (PSI), f
 
 The white-light images are searched for and downloaded through the Virtual Solar Observatory with SunPy, for the time window `wl_window` of the configuration: LASCO C2 images, and the COR1 and COR2 images of STEREO-B. The search also returns products that corona3d does not use (polarised C2 images, the COR1 sequence `s5c1B`, and the polarised COR2 sequence `n4c2B`); they are kept in `data/wl/` but are not read. When some files fail, `corona3d fetch --wl` given again downloads the missing ones, and the files already present are skipped by SunPy. On an ordinary connection, the whole download takes a few minutes.
 
-## 4. Drawing the scene
+## 4. Drawing the figure
 
 ```
 corona3d render
 ```
 
-draws the three-panel figure into `figures/corona3d.png`: panel a shows the scene from Earth, panel b from above the solar north pole with the direction of the Earth at the bottom, and panel c from STEREO-B. With the default layers, the rendering takes 30 to 45 s, most of it the tracing of about 4,500 field lines. The options of `render` are:
+draws the three-panel figure into `figures/corona3d.png`: panel a shows the reconstruction from Earth, panel b from above the solar north pole with the direction of the Earth at the bottom, and panel c from STEREO-B. With the default layers, the rendering takes 30 to 45 s, most of it the tracing of about 4,500 field lines. The options of `render` are:
 
 | Option | Effect |
 |---|---|
@@ -101,7 +101,7 @@ Some combinations that are useful in practice:
 ```
 corona3d render --no-open --no-closed --out figures/surface.png          # the density surface, the streamer, and the CME only
 corona3d render --no-surface --out figures/field.png                       # the field lines without the surface
-corona3d render --c2 --cor1 --cor2 --out figures/scene_wl.png              # with the coronagraph images
+corona3d render --c2 --cor1 --cor2 --out figures/corona3d_wl.png           # with the coronagraph images
 corona3d render --cor1 --no-open --no-closed --out figures/cor1.png        # COR1 alone, 4 R_sun panels
 corona3d render --c2 --wl-time 2013-10-25T15:36 --out figures/c2_1536.png  # a later C2 frame
 ```
@@ -159,7 +159,7 @@ corona3d render --radio --radio-sources '[{"freq": 173, "x": [-1.19, -1.14, -1.0
 | Key | Default | Meaning |
 |---|---|---|
 | `event` | text | description of the event, for the user only |
-| `time` | `2013-10-25T15:00` | time of the scene (observers and CME shell) |
+| `time` | `2013-10-25T15:00` | time of the reconstruction (observers and CME shell) |
 | `run` | `cr2143-medium/hmi_mast_mas_std_0201` | PSI MAS/MAST run, as its path in the PSI archive |
 | `density_scale` | 2.0 | factor applied to the model density (Morosan et al. 2022) |
 | `model_dlon` | −8.243 | rotation of the model in Carrington longitude, degrees (METHODS.md, Section 3) |
@@ -195,8 +195,8 @@ The Python function `corona3d.newkirk_r(f_mhz)` gives the four-fold Newkirk heig
 from corona3d import LAYERS, make_figure, newkirk_r
 
 # the README figures
-make_figure("figures/scene.png", data_root="corona3d_work")
-make_figure("figures/scene_wl.png", data_root="corona3d_work", c2=True, cor1=True, cor2=True)
+make_figure("figures/corona3d.png", data_root="corona3d_work")
+make_figure("figures/corona3d_wl.png", data_root="corona3d_work", c2=True, cor1=True, cor2=True)
 
 # parameters changed for one figure only, without editing config.json
 make_figure("figures/scale25.png", data_root="corona3d_work", params={"density_scale": 2.5},
@@ -206,7 +206,7 @@ print(LAYERS)            # the names of the layers
 print(newkirk_r(173))    # 1.576 R_sun
 ```
 
-`make_figure` takes the path of the figure, the working directory as `data_root`, the half-height `half`, a dictionary `params` whose keys replace those of the default configuration, and any layer as a keyword set to `True` or `False`. A misspelt layer raises an error that lists the valid names. The parameters of `config.json` are not read by `make_figure`; to use them from Python, read them with `corona3d.paths.config("corona3d_work")` and pass them as `params`. The scene itself is built by `corona3d.scene.build_scene(params, layers, data_root)`, which returns a dictionary with the density surface (a PyVista mesh with the Alfvén speed as `va`), the field lines (lists of N × 3 arrays in R⊙, Carrington-Cartesian coordinates), the GCS shell (an array of rings), and the coronagraph planes (PyVista grids with the difference image as `wl`), for analyses beyond the figure.
+`make_figure` takes the path of the figure, the working directory as `data_root`, the half-height `half`, a dictionary `params` whose keys replace those of the default configuration, and any layer as a keyword set to `True` or `False`. A misspelt layer raises an error that lists the valid names. The parameters of `config.json` are not read by `make_figure`; to use them from Python, read them with `corona3d.paths.config("corona3d_work")` and pass them as `params`. The reconstruction itself is built by `corona3d.reconstruction.reconstruct(params, layers, data_root)`, which returns a dictionary with the density surface (a PyVista mesh with the Alfvén speed as `va`), the field lines (lists of N × 3 arrays in R⊙, Carrington-Cartesian coordinates), the GCS shell (an array of rings), and the coronagraph planes (PyVista grids with the difference image as `wl`), for analyses beyond the figure.
 
 ## 8. Another event or another model run
 
@@ -225,7 +225,7 @@ corona3d is set up for the event of 2013 October 25, but every element of the ev
 4. Enter the GCS parameters of the CME under `gcs`, the white-light window and time as `wl_window` and `wl_time`, and the radio sources under `radio_sources`.
 5. Run `corona3d fetch` and `corona3d render`.
 
-The third view and the coronagraph layers COR1 and COR2 are those of STEREO-B, which lost contact with Earth in October 2014. For events after that date, the third panel can still show the scene from the position given under `stereo_b` (for example the position of STEREO-A entered there), but the COR1 and COR2 layers read only STEREO-B images. The streamer seed line is placed relative to the CME shell and to the meridian under `streamer_flank.lon`, which should be chosen anew for each event from the closed loops of its model.
+The third view and the coronagraph layers COR1 and COR2 are those of STEREO-B, which lost contact with Earth in October 2014. For events after that date, the third panel can still show the reconstruction from the position given under `stereo_b` (for example the position of STEREO-A entered there), but the COR1 and COR2 layers read only STEREO-B images. The streamer seed line is placed relative to the CME shell and to the meridian under `streamer_flank.lon`, which should be chosen anew for each event from the closed loops of its model.
 
 ## 9. How the results were checked
 
@@ -243,7 +243,7 @@ Both figures of the README were drawn from a new working directory after `corona
 
 ## 11. Data sources, terms of use, and citation
 
-The MAS/MAST runs are provided by Predictive Science Inc. at [predsci.com](https://www.predsci.com/data/runs/); work that uses them should cite Lionello et al. (2009) and Mikić et al. (2018). LASCO is a project of the ESA/NASA SOHO mission, and its data should be acknowledged as such together with Brueckner et al. (1995); SECCHI data are produced by the SECCHI consortium of the NASA STEREO mission and should be cited with Howard et al. (2008). The GCS model should be cited with Thernisien (2011) and PyThea with Kouloumvakos et al. (2022), and the scene of the event with Morosan et al. (2022). The references are collected in `docs/refs.bib`.
+The MAS/MAST runs are provided by Predictive Science Inc. at [predsci.com](https://www.predsci.com/data/runs/); work that uses them should cite Lionello et al. (2009) and Mikić et al. (2018). LASCO is a project of the ESA/NASA SOHO mission, and its data should be acknowledged as such together with Brueckner et al. (1995); SECCHI data are produced by the SECCHI consortium of the NASA STEREO mission and should be cited with Howard et al. (2008). The GCS model should be cited with Thernisien (2011) and PyThea with Kouloumvakos et al. (2022), and the reconstruction of the event with Morosan et al. (2022). The references are collected in `docs/refs.bib`.
 
 To cite corona3d itself, use [CITATION.cff](../CITATION.cff). A DOI will be added when the repository is made public.
 

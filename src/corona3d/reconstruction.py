@@ -1,4 +1,4 @@
-"""The three-dimensional scene and the three-panel figure, every layer switchable.
+"""The three-dimensional reconstruction and the three-panel figure, every layer switchable.
 
 MAS/MAST n_e iso-surface coloured by v_A, open, closed, and streamer field lines, a grey
 reference sphere, the GCS shell of the CME, radio sources at their Newkirk heights, and LASCO C2
@@ -54,7 +54,7 @@ def radio_points(p):
     return out
 
 
-def build_scene(p, on, data_root):
+def reconstruct(p, on, data_root):
     """Only the layers switched on are built (field tracing is the slow part)."""
     sc = {}
     need_model = on["surface"] or on["open"] or on["closed"] or on["streamer"]
@@ -171,7 +171,7 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
     p = dict(P, **(params or {}))
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    sc = build_scene(p, on, data_root)
+    sc = reconstruct(p, on, data_root)
 
     e = unit_vec(*p["earth"])
     _, up_e, _ = observer_basis(*p["earth"])

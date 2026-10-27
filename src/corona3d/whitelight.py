@@ -1,4 +1,4 @@
-"""LASCO C2 and STEREO-B COR1/COR2 base-difference images as planes in the 3-D scene.
+"""LASCO C2 and STEREO-B COR1/COR2 base-difference images as planes in the three-dimensional reconstruction.
 
 Each image is rotated to solar north up, base-differenced, binned, and placed on the plane
 through Sun centre perpendicular to its observer's line of sight (x west, y north, R_sun), so
@@ -17,7 +17,7 @@ from astropy.io import fits
 from .geometry import observer_basis
 
 # inner and outer edge of the field of view [R_sun] (COR2 starts where COR1 ends, so the two
-# coplanar STEREO-B images do not overlap); observer key in the scene params
+# coplanar STEREO-B images do not overlap); observer key in the configuration
 INSTR = dict(c2=dict(r=(2.2, 6.0), obs="earth"),
              cor1=dict(r=(1.5, 4.0), obs="stereo_b"),
              cor2=dict(r=(4.0, 15.0), obs="stereo_b"))

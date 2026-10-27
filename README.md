@@ -4,7 +4,7 @@
 
 > **corona3d is private** (pre-release 0.0.1). It is ready for use and for testing, and its results can still change between versions. Please report problems, wrong results, and suggestions on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, use [CITATION.cff](CITATION.cff); a DOI will be added when the repository is made public.
 
-Coronal mass ejections (CMEs) drive shocks through a corona whose density, magnetic field, and Alfvén speed vary strongly with height, latitude, and longitude, and the radio bursts that these shocks excite, such as the herringbones of type II bursts, are emitted where the shock meets plasma of a particular density and field geometry. Whether a shock becomes super-Alfvénic, and whether it accelerates electrons along closed streamer loops or along open field, therefore depends on the three-dimensional structure of the corona at the moment the CME passes, which no single image can show. Morosan et al. ([2022](https://doi.org/10.1051/0004-6361/202244432)) combined a magnetohydrodynamic (MHD) model of the corona, a graduated cylindrical shell (GCS) of the CME, and radio-source positions in one three-dimensional scene seen from three viewpoints (their Fig. 7), and showed that the herringbones originate where the CME flank meets the closed loops of a streamer. corona3d builds this scene from public data alone, with every layer switchable, so that the same analysis can be repeated, examined layer by layer, and extended with coronagraph images and with radio sources from other observations.
+Coronal mass ejections (CMEs) drive shocks through a corona whose density, magnetic field, and Alfvén speed vary strongly with height, latitude, and longitude, and the radio bursts that these shocks excite, such as the herringbones of type II bursts, are emitted where the shock meets plasma of a particular density and field geometry. Whether a shock becomes super-Alfvénic, and whether it accelerates electrons along closed streamer loops or along open field, therefore depends on the three-dimensional structure of the corona at the moment the CME passes, which no single image can show. Morosan et al. ([2022](https://doi.org/10.1051/0004-6361/202244432)) combined a magnetohydrodynamic (MHD) model of the corona, a graduated cylindrical shell (GCS) of the CME, and radio-source positions in one three-dimensional reconstruction seen from three viewpoints (their Fig. 7), and showed that the herringbones originate where the CME flank meets the closed loops of a streamer. corona3d builds this reconstruction from public data alone, with every layer switchable, so that the same analysis can be repeated, examined layer by layer, and extended with coronagraph images and with radio sources from other observations.
 
 ## What can I do with it?
 
@@ -28,23 +28,23 @@ Coronal mass ejections (CMEs) drive shocks through a corona whose density, magne
    corona3d init
    corona3d fetch
    ```
-3. Draw the scene, and the same scene with the coronagraph images:
+3. Draw the figure, and the same figure with the coronagraph images:
    ```
    corona3d render
-   corona3d render --c2 --cor1 --cor2 --out figures/scene_wl.png
+   corona3d render --c2 --cor1 --cor2 --out figures/corona3d_wl.png
    ```
 
-The figures go to `figures/`, together with the image of each panel (`view_earth.png`, `view_north.png`, `view_stb.png`). The [user guide](docs/USER_GUIDE.md) describes every layer, option, and parameter, and [METHODS.md](METHODS.md) describes how each element of the scene is computed.
+The figures go to `figures/`, together with the image of each panel (`view_earth.png`, `view_north.png`, `view_stb.png`). The [user guide](docs/USER_GUIDE.md) describes every layer, option, and parameter, and [METHODS.md](METHODS.md) describes how each element of the reconstruction is computed.
 
 ### Worked example: the CME of 2013 October 25
 
 The default configuration is the event studied by Morosan et al. (2022): a CME launched from the eastern hemisphere at about 15:00 UT and observed from Earth and from STEREO-B, 142° apart, during which the Nançay Radioheliograph recorded herringbones at 173 and 228 MHz. On an ordinary computer, `corona3d render` takes about 45 s and draws the electron-density surface at 9 × 10⁷ cm⁻³ (the plasma level of 173 MHz emitted at the harmonic) coloured by the Alfvén speed between 100 and 700 km s⁻¹, about 4,500 open and closed field lines, the streamer loops above the CME flank in purple, the 1.2 R⊙ reference sphere, and the GCS shell in magenta, seen from Earth, from above the solar north pole, and from STEREO-B.
 
-<p align="center"><img src="docs/scene.png" width="100%" alt="The scene of 2013 October 25 seen from Earth, the solar north pole, and STEREO-B"></p>
+<p align="center"><img src="docs/corona3d_2013-10-25.png" width="100%" alt="The reconstruction of 2013 October 25 seen from Earth, the solar north pole, and STEREO-B"></p>
 
 With `--c2 --cor1 --cor2` the LASCO C2 image of 15:24 UT appears in the Earth view and the COR1 and COR2 images of STEREO-B in the STEREO-B view, each minus its first image of the day. The CME front lies on the east limb in C2 and on the west limb in COR2-B, on the same side as the GCS shell in each view.
 
-<p align="center"><img src="docs/scene_wl.png" width="100%" alt="The same scene with LASCO C2 and STEREO-B COR1 and COR2 base-difference images"></p>
+<p align="center"><img src="docs/corona3d_2013-10-25_wl.png" width="100%" alt="The same reconstruction with LASCO C2 and STEREO-B COR1 and COR2 base-difference images"></p>
 
 The public model differs from the run used by Morosan et al. (2022), which PSI no longer serves, so that the surface and the field lines agree with their figure in outline but not in every detail; the user guide lists the differences.
 
@@ -117,7 +117,7 @@ From Python, the same figure is drawn with
 
 ```python
 from corona3d import make_figure
-make_figure("figures/scene_wl.png", data_root="corona3d_work", c2=True, cor1=True, cor2=True, open=False)
+make_figure("figures/corona3d_wl.png", data_root="corona3d_work", c2=True, cor1=True, cor2=True, open=False)
 ```
 
 ### Where corona3d keeps its files
