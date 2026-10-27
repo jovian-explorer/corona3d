@@ -109,6 +109,8 @@ In version 0.0.1, twenty-one statements of the README, METHODS.md, and the user 
 | Panel framing | `views[].frame` | from the published figure | choice | layout of Morosan et al. (2022), Fig. 7 | none |
 | NRH image geometry | `nrh.py` | Sun centre at CRPIX (from 1), SOLAR_R pixels per R⊙, north up | sourced | NRH2 file headers (ROT_P = 1); Kerdraon & Delouis (1997) | `test_reader_places_a_source_at_its_sky_position` |
 | NRH source centroid | `nrh.source` | brightness-weighted, pixels above 0.5 of the peak | choice | | `test_reader_places_a_source_at_its_sky_position` |
-| NRH blobs | `radio_nrh` | one image per 60 s, peak ≥ 10⁸ K, coloured along a colour map per frequency | choice | the manner of Morosan et al. (2022), Fig. 7 | `test_radio_layer_draws_a_chain_of_blobs_per_frequency` |
+| Radio blobs | `radio_images` | one image per 60 s, peak ≥ 10⁸ K, coloured along a colour map per frequency | choice | the manner of Morosan et al. (2022), Fig. 7 | `test_radio_layer_draws_a_chain_of_blobs_per_frequency` |
 | Streamer lines drawn | `streamer_max_lines` | at most 150, an even subset; fainter with the radio layer | choice | | none |
 | Perspective option | `projection`, `camera_distance` | 6.65 R⊙ at the default framing | choice | the camera fitted to the published Fig. 7 | `test_perspective_projection_magnifies_the_near_side` |
+| OVRO-LWA image geometry | `ovro_lwa.py` | helioprojective header (CRPIX, CDELT, CRVAL in arcsec, RSUN_OBS); band images restored to the full grid by cubic interpolation | sourced | file headers; lwa-solar-util `recover_fits_from_h5` | `test_reader_restores_the_grid_and_places_the_source` |
+| OVRO-LWA selection | `ovro_lwa.image_at` | nearest band within 3 MHz, nearest file within 2 min | choice | | `test_reader_restores_the_grid_and_places_the_source` |

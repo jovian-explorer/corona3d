@@ -20,6 +20,8 @@ def main(argv=None):
     f.add_argument("--model", action="store_true", help="only the MAS/MAST run")
     f.add_argument("--wl", action="store_true", help="only the LASCO C2 and STEREO-B COR1, COR2 images")
     f.add_argument("--cor1a", action="store_true", help="also the STEREO-A COR1 images (for scripts/gcs_fit.py)")
+    f.add_argument("--ovro-lwa", action="store_true",
+                   help="only the OVRO-LWA images of the radio_images entries (public AWS bucket)")
     r = sub.add_parser("render", help="draw the three-panel figure",
                        epilog="layers: " + ", ".join(LAYERS))
     for k in LAYERS:
@@ -47,10 +49,13 @@ def main(argv=None):
     cfg = paths.config(h)
     if a.cmd == "fetch":
         failed = 0
-        if a.model or not a.wl:
+        everything = not (a.model or a.wl or a.ovro_lwa)
+        if a.model or everything:
             failed += fetch.model(h, cfg)
-        if a.wl or not a.model:
+        if a.wl or everything:
             failed += fetch.whitelight(h, cfg, cor1a=a.cor1a)
+        if a.ovro_lwa or everything:
+            failed += fetch.ovro_lwa(h, cfg)
         if failed:
             sys.exit(1)
         return

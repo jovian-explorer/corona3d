@@ -152,9 +152,21 @@ A `wl_time` outside `wl_window`, or one whose nearest frame is the base frame it
 
 ### 5.7 `radio`: radio sources (off)
 
-This layer draws the sources of a radio burst as coloured blobs, in the manner of the blobs in Fig. 7 of Morosan et al. (2022). Its main input is the 2-D images of the Nançay Radioheliograph (NRH): the files `nrh2_FFFF_..._i.fts`, one per frequency and observing period, each holding a Stokes I image of 64 × 64 pixels about every 10 s. Since the BASS2000 archive of the Paris Observatory delivers these files only on request, `corona3d fetch` does not download them; they are copied into `data/nrh/` of the working directory, where the layer finds them by their names.
+This layer draws the sources of a radio burst as coloured blobs, in the manner of the blobs in Fig. 7 of Morosan et al. (2022). Its input is radio images of two instruments, which may be used together. The first is the 2-D images of the Nançay Radioheliograph (NRH) at 150 to 450 MHz: the files `nrh2_FFFF_..._i.fts`, one per frequency and observing period, each holding a Stokes I image of 64 × 64 pixels about every 10 s. Since the BASS2000 archive of the Paris Observatory delivers these files only on request, `corona3d fetch` does not download them; they are copied into `data/nrh/` of the working directory. The second is the spectral images of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA) at 32 to 87 MHz, available from 2024 April onward: one file `ovro-lwa-352.lev1_mfs_10s.<time>Z.image_I.hdf` per 10 s integration, with 12 band images centred at 34.1 to 84.6 MHz. These files are public, in the OVRO-LWA solar data bucket on Amazon Web Services, and `corona3d fetch --ovro-lwa` downloads the band-averaged files of the interval of every OVRO-LWA entry.
 
-For each frequency in `radio_nrh.freqs`, the layer takes one image every `radio_nrh.step_s` seconds between `radio_nrh.start` and `radio_nrh.end`, keeps the images whose peak brightness temperature reaches `radio_nrh.min_tb`, and measures in each the centroid of the pixels brighter than `radio_nrh.level` times the peak. Each centroid becomes a blob at the height that the four-fold Newkirk model gives for that frequency at the second harmonic, on the side of the plane of the sky that faces Earth, and the blobs of one frequency are coloured along one colour map from the first image to the last (`radio_nrh.colormaps`: spring, winter, autumn, and summer for the first to the fourth frequency). With `"contours": true`, the contour of the last image at `level` times its peak is drawn as well, at the same height. The terminal lists every image used, with its time, peak brightness temperature, centroid, and height:
+The image sets are listed under `radio_images` in `config.json`, one entry per instrument, for example
+
+```json
+{"radio_images": [
+  {"instrument": "nrh", "folder": "data/nrh", "freqs": [150.9, 228.0], "start": "2024-05-14T14:08:00",
+   "end": "2024-05-14T14:14:00", "step_s": 60, "level": 0.5, "min_tb": 1e8, "contours": false},
+  {"instrument": "ovro_lwa", "folder": "data/ovro_lwa", "freqs": [52.4, 70.8], "start": "2024-05-14T14:08:00",
+   "end": "2024-05-14T14:14:00", "step_s": 60, "level": 0.5, "min_tb": 1e6, "contours": false}]}
+```
+
+where the numbers only illustrate the format. For OVRO-LWA, each frequency selects the nearest band within 3 MHz, and each time the nearest file within 2 min.
+
+For each frequency of an entry (`freqs`), the layer takes one image every `step_s` seconds between `start` and `end`, keeps the images whose peak brightness temperature reaches `min_tb`, and measures in each the centroid of the pixels brighter than `level` times the peak. Each centroid becomes a blob at the height that the four-fold Newkirk model gives for that frequency at the second harmonic, on the side of the plane of the sky that faces Earth, and the blobs of one frequency are coloured along one colour map from the first image to the last (`radio_colormaps`: spring, winter, autumn, and summer for the first to the fourth frequency, counted over all entries). With `"contours": true`, the contour of the last image at `level` times its peak is drawn as well, at the same height. The terminal lists every image used, with its time, peak brightness temperature, centroid, and height:
 
 ```
 radio: NRH 150.9 MHz 14:58:55 UT, peak 1.15e+10 K, centroid (-1.20, -0.01) R_sun, at 1.647 R_sun
@@ -216,7 +228,8 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | `n_seeds`, `seed_r` | 4500, 1.03 | number and radius of the footpoints of the open and closed lines |
 | `line_r_max` | 3.0 | field lines are drawn only within this radius, R⊙ |
 | `streamer_max_lines` | 150 | at most this many streamer lines are drawn, an even subset |
-| `radio_nrh` | folder `data/nrh`, 14:59 to 15:03 UT every 60 s, 150.9 and 432 MHz, level 0.5, min_tb 10⁸ K, no contours | NRH images for the radio blobs (Section 5.7) |
+| `radio_images` | one NRH entry: folder `data/nrh`, 14:59 to 15:03 UT every 60 s, 150.9 and 432 MHz, level 0.5, min_tb 10⁸ K, no contours | radio image sets for the blobs, NRH or OVRO-LWA (Section 5.7) |
+| `radio_colormaps` | spring, winter, autumn, summer | colour maps of the blob chains, one per frequency |
 | `radio_sources` | [] | other radio sources (Section 5.7) |
 | `radio_radius` | 0.12 | radius of the source spheres, R⊙ |
 | `wl_window` | 14:35 to 15:40 UT | window of the white-light download; its first frame of each instrument is the base |
@@ -276,7 +289,7 @@ corona3d is set up for the event of 2013 October 25, but every element of the ev
    python scripts/gcs_fit.py <working directory>/data/wl --out gcs_fit.json
    ```
    from a copy of the repository. The script fits the six GCS parameters to the CME envelopes in C2, COR1-A, and COR1-B at the time `T_REF` set at its top, and it extrapolates the apex height to the time `T_OUT` from the front in the limb view (METHODS.md, Section 7). The flare site `FLARE`, which seeds the envelopes, is also set at its top, and the results `t1500` and `t1524` go under `gcs` and `gcs_wl` (tilt minus 90°).
-5. Copy the NRH image files of the event into `data/nrh/`, set the burst interval and the frequencies under `radio_nrh` (or enter other positions under `radio_sources`), and run `corona3d render --radio`.
+5. Copy the NRH image files of the event into `data/nrh/`, set the burst interval and the frequencies of each instrument under `radio_images`, and, for OVRO-LWA, run `corona3d fetch --ovro-lwa`; other positions can be entered under `radio_sources`. Then run `corona3d render --radio`.
 
 The third observer and the coronagraph layers COR1 and COR2 are those of STEREO-B, which lost contact with Earth in October 2014. For events after that date, any panel can still be set to look from the position of STEREO-A entered as a longitude and latitude under `views`, but the COR1 and COR2 layers read only STEREO-B images.
 

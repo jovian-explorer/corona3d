@@ -11,7 +11,7 @@ Coronal mass ejections (CMEs) drive shocks through a corona whose density, magne
 * **Draw the corona at a plasma level**: the iso-surface of the electron density of a Predictive Science Inc. (PSI) MAS/MAST model at any chosen density, for example the plasma level of a radio frequency, coloured by the Alfvén speed.
 * **Trace the coronal magnetic field**: open and closed field lines from a dense set of footpoints, traced through the whole model out to 30 R⊙, and the closed field lines that pass through the shell of the CME, which are the loops of the streamer that the CME meets.
 * **Place the CME in three dimensions**: the GCS shell of the CME (Thernisien [2011](https://doi.org/10.1088/0067-0049/194/2/33)), built with PyThea (Kouloumvakos et al. [2022](https://doi.org/10.3389/fspas.2022.974137)) from its height, aspect ratio, half-angle, direction, and tilt, at the time of the model and at the time of the coronagraph images.
-* **Add radio sources**: the sources of a radio burst measured in NRH images, drawn as a chain of coloured blobs for each frequency, one blob per time step, at the height that a four-fold Newkirk ([1961](https://doi.org/10.1086/147104)) density model gives for that frequency, in the manner of the blobs in Fig. 7 of Morosan et al. (2022); sky-plane positions from other instruments can be added as well.
+* **Add radio sources**: the sources of a radio burst measured in images of the NRH (150 to 450 MHz) or of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA, 32 to 87 MHz, from 2024 April onward), drawn as a chain of coloured blobs for each frequency, one blob per time step, at the height that a four-fold Newkirk ([1961](https://doi.org/10.1086/147104)) density model gives for that frequency, in the manner of the blobs in Fig. 7 of Morosan et al. (2022); sky-plane positions from other instruments can be added as well.
 * **Overlay coronagraph images**: images of the Large Angle and Spectrometric Coronagraph (LASCO) C2 and of the STEREO-B COR1 and COR2 coronagraphs, divided by an image taken before the eruption, placed in the plane of the sky of the spacecraft that recorded them and drawn with an orthographic projection, so that the model, the shell, and the observed CME share one scale.
 * **Choose the viewpoint of every panel**: Earth, STEREO-B, above the solar north pole, or any Carrington longitude and latitude with a roll angle.
 * **Switch every layer on or off** from the command line or from Python, and change the event, the model run, or any parameter in one configuration file.
@@ -66,6 +66,7 @@ The model run and the images are public, and `corona3d fetch` downloads them int
 | STEREO-B/SECCHI COR1 polarisation triplets and COR2 total-brightness images, level 0.5; STEREO-A COR1 with `--cor1a` | Virtual Solar Observatory through SunPy (Howard et al. [2008](https://doi.org/10.1007/s11214-008-9341-4)) | STEREO-B-view overlay, GCS fit |
 | GCS parameters of the CME at 15:24 and 15:00 UT | fitted to LASCO C2 and COR1-A and -B with `scripts/gcs_fit.py` (METHODS.md, Section 7) | CME shell |
 | NRH2 images (Stokes I, about 10 s) at 150.9 and 432 MHz | BASS2000 archive of the Paris Observatory, delivered on request; copied by the user into `data/nrh/` | radio layer |
+| OVRO-LWA spectral images (Stokes I, 10 s, 12 bands at 34 to 85 MHz), from 2024 April | [OVRO-LWA solar data](https://ovsa.njit.edu/docs/pages/ovro-lwa-solar-data-products/), public bucket on Amazon Web Services (CC BY 4.0); `corona3d fetch --ovro-lwa` | radio layer |
 | Other radio-source positions (optional) | supplied by the user | radio layer |
 
 The NRH images are not downloaded by `corona3d fetch`, since the archive of the Paris Observatory (BASS2000) delivers them only on request; the image files (`nrh2_*_i.fts`) are copied into `data/nrh/` of the working directory, where the radio layer reads them (user guide, Section 5.7). All references are collected in [docs/refs.bib](docs/refs.bib).
@@ -98,6 +99,7 @@ The dependencies are NumPy, SciPy, Matplotlib, PyVista (Sullivan & Kaszynski [20
 corona3d init                                   # write config.json (the event of 2013-10-25) in the working directory
 corona3d fetch                                  # download the MAS/MAST run and the white-light images
 corona3d fetch --model                          # only the model run (or --wl: only the images; --cor1a: also COR1-A)
+corona3d fetch --ovro-lwa                       # only the OVRO-LWA images of the radio_images entries
 corona3d render                                 # the three-panel figure with the default layers
 corona3d render --c2 --cor1 --cor2              # with the coronagraph images
 corona3d render --no-open --no-closed           # without the open and closed field lines

@@ -111,40 +111,46 @@ def reconstruct(p=None, on=None, data_root="."):
               f"{len(lines) - n[OPEN] - n[CLOSED]} undetermined, of {len(lines)}")
     if on["radio"]:
         sc["radio"], sc["radio_contours"] = radio_points(p), []
-        rn = p["radio_nrh"]
-        nrh_dir = Path(data_root) / rn["folder"]
-        if any(nrh_dir.glob("nrh2_*")):
-            from . import nrh
-            from .whitelight import utc
-            t0, t1 = utc(rn["start"]), utc(rn["end"])
-            for j, f in enumerate(rn["freqs"]):
+        from . import nrh, ovro_lwa
+        from .whitelight import utc
+        readers = {"nrh": nrh, "ovro_lwa": ovro_lwa}
+        names = {"nrh": "NRH", "ovro_lwa": "OVRO-LWA"}
+        j = 0                                              # colour maps run over all frequencies
+        for rs in p["radio_images"]:
+            mod, folder = readers[rs["instrument"]], Path(data_root) / rs["folder"]
+            if not folder.exists() or not any(folder.iterdir()):
+                print(f"radio: no {names[rs['instrument']]} files in {folder}")
+                continue
+            t0, t1 = utc(rs["start"]), utc(rs["end"])
+            for f in rs["freqs"]:
                 h = newkirk_r(f)
-                cmap = colormaps[rn["colormaps"][j % len(rn["colormaps"])]]
+                cmap = colormaps[p["radio_colormaps"][j % len(p["radio_colormaps"])]]
+                j += 1
                 blobs = []                                 # one per step between start and end
                 t = t0
                 while t <= t1:
-                    img, tf, x, y = nrh.image_at(nrh_dir, f, t)
-                    lines, (cx, cy), tb = nrh.source(img, x, y, rn["level"])
-                    if tb >= rn["min_tb"] and (not blobs or blobs[-1][0] != tf):
+                    img, tf, x, y = mod.image_at(folder, f, t)
+                    lines, (cx, cy), tb = nrh.source(img, x, y, rs["level"])
+                    if tb >= rs["min_tb"] and (not blobs or blobs[-1][0] != tf):
                         blobs.append((tf, cx, cy, tb, lines))
-                    t += timedelta(seconds=rn["step_s"])
+                    t += timedelta(seconds=rs["step_s"])
+                label = f"{names[rs['instrument']]} {f:g} MHz"
                 if not blobs:
-                    print(f"radio: NRH {f:g} MHz has no image above {rn['min_tb']:.1e} K "
-                          f"between {rn['start']} and {rn['end']}")
+                    print(f"radio: {label} has no image above {rs['min_tb']:.1e} K between {rs['start']} and {rs['end']}")
                     continue
                 xy = np.array([(cx, cy) for _, cx, cy, _, _ in blobs])
                 xyz = deproject(xy[:, 0], xy[:, 1], h, *p["earth"])
                 colours = cmap(np.linspace(0, 1, len(blobs)))[:, :3]       # early to late
                 sc["radio"].append((f, xyz, colours))
-                if rn["contours"]:
+                if rs["contours"]:
                     sc["radio_contours"].append((f, [deproject(c[:, 0], c[:, 1], h, *p["earth"], warn=False)
                                                      for c in blobs[-1][4]]))
-                sc["times"].setdefault("radio", []).append((f, blobs[0][0], blobs[-1][0], len(blobs)))
+                sc["times"].setdefault("radio", []).append((label, blobs[0][0], blobs[-1][0], len(blobs)))
                 for (tf, cx, cy, tb, _) in blobs:
-                    print(f"radio: NRH {f:g} MHz {tf:%H:%M:%S} UT, peak {tb:.2e} K, centroid "
+                    print(f"radio: {label} {tf:%H:%M:%S} UT, peak {tb:.2e} K, centroid "
                           f"({cx:+.2f}, {cy:+.2f}) R_sun, at {h:.3f} R_sun")
         if not sc["radio"]:
-            print("radio: no NRH images in", nrh_dir, "and no radio_sources given; layer empty")
+            print("radio: no radio images and no radio_sources; layer empty")
     for inst in WL:
         if on[inst]:
             from .whitelight import INSTR, load_plane
@@ -300,8 +306,8 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
     t = sc["times"]
     notes = [[f"model {p['run'].split('/')[0]}, shell {str(t['shell'])[11:16]} UT"] for _ in imgs]
     for i in range(len(notes)):
-        for f, ta, tb_, n in t.get("radio", []):
-            notes[i].append(f"NRH {f:g} MHz, {n} images {ta:%H:%M:%S}-{tb_:%H:%M:%S} UT")
+        for label, ta, tb_, n in t.get("radio", []):
+            notes[i].append(f"{label}, {n} images {ta:%H:%M:%S}-{tb_:%H:%M:%S} UT")
     for i, owner in enumerate(owners):
         for inst in IMAGES_OF.get(owner, ()):
             if inst in t:

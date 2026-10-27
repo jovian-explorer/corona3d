@@ -71,3 +71,38 @@ def whitelight(h, cfg, cor1a=False):
     if failed:
         print(f"{failed} files failed; run `corona3d fetch --wl` again to fetch them")
     return failed
+
+
+def ovro_lwa(h, cfg):
+    """Download the OVRO-LWA band-averaged (mfs) image files of every radio_images entry with
+    instrument "ovro_lwa", between its start and end, from the public bucket into its folder;
+    returns the number of files that failed."""
+    from datetime import timedelta
+
+    from . import ovro_lwa as lwa
+    from .whitelight import utc
+    failed = 0
+    for rs in cfg["radio_images"]:
+        if rs["instrument"] != "ovro_lwa":
+            continue
+        t0, t1 = utc(rs["start"]) - timedelta(minutes=1), utc(rs["end"]) + timedelta(minutes=1)
+        d = h / rs["folder"]
+        d.mkdir(parents=True, exist_ok=True)
+        keys = [k for day in {t0.date(), t1.date()} for k in lwa.list_remote(day)]
+        keys = [k for k in keys if t0 <= lwa.file_time(k) <= t1]
+        print(f"OVRO-LWA: {len(keys)} files between {t0:%H:%M} and {t1:%H:%M} UT")
+        for k in keys:
+            f = d / k.split("/")[-1]
+            if f.exists():
+                continue
+            tmp = f.with_suffix(".part")
+            try:
+                with urllib.request.urlopen(f"{lwa.S3}/{k}", timeout=120) as r, open(tmp, "wb") as o:
+                    while chunk := r.read(1 << 20):
+                        o.write(chunk)
+                tmp.replace(f)
+            except OSError as e:
+                tmp.unlink(missing_ok=True)
+                print(f"{f.name}: failed ({e})")
+                failed += 1
+    return failed

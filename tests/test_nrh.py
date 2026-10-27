@@ -57,8 +57,9 @@ def test_radio_layer_draws_a_chain_of_blobs_per_frequency(synthetic_home):
     write_nrh(d / "nrh2_4320_h60_20131025_145800c00_i.fts", 432.0, T0, 40,
               lambda k: (-0.85, -0.2) if k >= 18 else None)
     on = dict(surface=False, sphere=False, open=False, closed=False, streamer=False, gcs=False, radio=True)
-    sc = reconstruct({"radio_nrh": {"start": "2013-10-25T14:59:00", "end": "2013-10-25T15:03:00",
-                                    "step_s": 60, "contours": True}}, on, synthetic_home)
+    entry = dict(instrument="nrh", folder="data/nrh", freqs=[150.9, 432.0], start="2013-10-25T14:59:00",
+                 end="2013-10-25T15:03:00", step_s=60, level=0.5, min_tb=1e8, contours=True)
+    sc = reconstruct({"radio_images": [entry]}, on, synthetic_home)
     (f1, xyz1, rgb1), (f2, xyz2, _) = sc["radio"]
     assert (f1, f2) == (150.9, 432.0)
     assert len(xyz1) == 5 and len(xyz2) == 3                 # quiet 432 MHz images left out

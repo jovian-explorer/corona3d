@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The radio layer also reads the spectral images of OVRO-LWA (`corona3d/ovro_lwa.py`; 32 to 87 MHz, from 2024 April onward), and `corona3d fetch --ovro-lwa` downloads them from the public OVRO-LWA solar data bucket. The radio image sets are listed under `radio_images` in `config.json`, one entry per instrument (NRH or OVRO-LWA), in place of `radio_nrh`; h5py is a new dependency. Offline tests on synthetic OVRO-LWA files (`tests/test_ovro_lwa.py`).
 - The radio layer reads the 2-D images of the Nançay Radioheliograph (`corona3d/nrh.py`), copied into `data/nrh/` of the working directory, and draws the sources of a burst as a chain of coloured blobs for each frequency, one per time step, at the Newkirk height of that frequency, in the manner of the blobs in Fig. 7 of Morosan et al. (2022); contours of the last image are optional (`radio_nrh` in `config.json`). For 2013 October 25, the images at 150.9 and 432 MHz between 14:59 and 15:03 UT give five and three blobs.
 - At most 150 streamer lines are drawn (`streamer_max_lines`), more faintly when the radio layer is on, so that the blobs remain visible; the notes of each panel are placed at its top right.
 - `"projection": "perspective"` draws the panels with the perspective camera of the published Fig. 7 (`camera_distance` 6.65 R⊙), and the panels have its aspect (`window` 1200 × 918 pixels); the orthographic projection remains the default.
