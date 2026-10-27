@@ -1,4 +1,4 @@
-"""LASCO C2 and STEREO-B COR1/COR2 images as planes in the three-dimensional reconstruction.
+"""LASCO C2 and STEREO (A or B) COR1/COR2 images as planes in the three-dimensional reconstruction.
 
 Each frame is normalised by its exposure time, binned, compared with the first frame of the
 download window (a ratio, or a difference), rotated to solar north up, and placed on the plane
@@ -19,10 +19,10 @@ from astropy.time import Time
 from .geometry import observer_basis
 
 # inner and outer edge of the field of view [R_sun] (COR2 starts where COR1 ends, so the two
-# coplanar STEREO-B images do not overlap); observer key in the configuration
+# coplanar STEREO images do not overlap); observer key in the configuration
 INSTR = dict(c2=dict(r=(2.2, 6.0), obs="earth"),
-             cor1=dict(r=(1.5, 4.0), obs="stereo_b"),
-             cor2=dict(r=(4.0, 15.0), obs="stereo_b"))
+             cor1=dict(r=(1.5, 4.0), obs="stereo"),
+             cor2=dict(r=(4.0, 15.0), obs="stereo"))
 NBIN = 256
 
 
@@ -38,7 +38,7 @@ def _time(f):
     return datetime.fromisoformat(h["DATE-OBS"][:19])
 
 
-def _frames(wl_dir, inst):
+def _frames(wl_dir, inst, sc="B"):
     """[(time, [files])] of total-brightness frames, earliest first."""
     d = Path(wl_dir)
     if inst == "c2":
@@ -49,9 +49,9 @@ def _frames(wl_dir, inst):
                 fs.append(f)
         return [(_time(f), [f]) for f in fs]
     if inst == "cor2":
-        return [(_time(f), [f]) for f in sorted(d.glob("*_d4c2B.fts"))]
+        return [(_time(f), [f]) for f in sorted(d.glob(f"*_d4c2{sc}.fts"))]
     out, cur = [], []                                  # COR1: three exposures within 60 s
-    for f in sorted(d.glob("*_s4c1B.fts"), key=_time):
+    for f in sorted(d.glob(f"*_[sn]4c1{sc}.fts"), key=_time):
         if cur and (_time(f) - _time(cur[0])).total_seconds() > 60:
             out.append(cur)
             cur = []
@@ -74,11 +74,11 @@ def _image(files, shape=None):
     return m
 
 
-def load_plane(inst, wl_dir, when, observer, window, mode="ratio"):
+def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B"):
     """Plane of one instrument at the frame nearest to `when`, compared with the first frame of
     `window` ([start, end]); returns (grid, frame time, base time)."""
     t0, t1 = utc(window[0]), utc(window[1])
-    frames = [f for f in _frames(wl_dir, inst) if t0 <= f[0] <= t1]
+    frames = [f for f in _frames(wl_dir, inst, sc) if t0 <= f[0] <= t1]
     if not frames:
         raise FileNotFoundError(f"no {inst} frames between {window[0]} and {window[1]} in {wl_dir}; "
                                 "run `corona3d fetch --wl`")

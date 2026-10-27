@@ -2,8 +2,8 @@
 
 MAS/MAST n_e iso-surface coloured by v_A, open and closed field lines, the closed lines threaded
 by the CME shell (the streamer loops), a grey reference sphere, the GCS shell of the CME, radio
-sources at their Newkirk heights, and LASCO C2 and STEREO-B COR1, COR2 images, seen from Earth,
-the solar north pole, and STEREO-B (the layout of Fig. 7 of Morosan et al. 2022).
+sources at their Newkirk heights, and LASCO C2 and STEREO COR1, COR2 images, seen from Earth,
+the solar north pole, and STEREO (the layout of Fig. 7 of Morosan et al. 2022).
 """
 from datetime import timedelta
 from pathlib import Path
@@ -22,7 +22,7 @@ from .layers import LAYERS, ON
 from .paths import config, default_config, merge, model_dir, wl_dir
 
 WL = ("c2", "cor1", "cor2")
-IMAGES_OF = {"earth": ("c2",), "stereo_b": ("cor2", "cor1")}
+IMAGES_OF = {"earth": ("c2",), "stereo": ("cor2", "cor1")}
 
 
 def newkirk_r(f_mhz, fold=4.0, harmonic=True):
@@ -155,7 +155,7 @@ def reconstruct(p=None, on=None, data_root="."):
         if on[inst]:
             from .whitelight import INSTR, load_plane
             sc[inst], tf, tb = load_plane(inst, wl_dir(data_root), p["wl_time"], p[INSTR[inst]["obs"]],
-                                          p["wl_window"], p["wl_mode"])
+                                          p["wl_window"], p["wl_mode"], p["stereo_sc"])
             sc["times"][inst] = (tf, tb)
     return sc
 
@@ -235,19 +235,19 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
 
 def view_geometry(v, p):
     """Viewing direction (from Sun centre towards the viewer), screen up, and the observer that
-    the view belongs to (earth, stereo_b, or None) for one entry of the configuration's views.
-    An entry names an observer ("from": "earth", "stereo_b", or "north") or gives a Carrington
+    the view belongs to (earth, stereo, or None) for one entry of the configuration's views.
+    An entry names an observer ("from": "earth", "stereo", or "north") or gives a Carrington
     longitude and latitude ("lon", "lat") of the viewing direction; "roll" turns the panel
     counter-clockwise by that angle [deg]."""
     src = v.get("from")
-    if src in ("earth", "stereo_b"):
+    if src in ("earth", "stereo"):
         lon, lat = p[src]
     elif src == "north":
         lon, lat = p["earth"][0], 90.0
     elif src is None and "lon" in v and "lat" in v:
         lon, lat = v["lon"], v["lat"]
     else:
-        raise ValueError(f"view {v}: give 'from' (earth, stereo_b, north) or 'lon' and 'lat'")
+        raise ValueError(f"view {v}: give 'from' (earth, stereo, north) or 'lon' and 'lat'")
     d = unit_vec(lon, lat)
     if abs(lat) > 89.9:                                  # from a pole: Earth's direction at the bottom
         e = unit_vec(*p["earth"])
@@ -256,7 +256,7 @@ def view_geometry(v, p):
         up = observer_basis(lon, lat)[1]                 # solar north up
     roll = np.radians(v.get("roll", 0.0))
     up = up * np.cos(roll) + np.cross(d, up) * np.sin(roll)
-    return d, up, (src if src in ("earth", "stereo_b") else None)
+    return d, up, (src if src in ("earth", "stereo") else None)
 
 
 def parse_view(text):
@@ -264,7 +264,7 @@ def parse_view(text):
     k, val = text.split("=", 1)
     i = "abc".index(k.strip().lower())
     val = val.strip()
-    if val in ("earth", "stereo_b", "north"):
+    if val in ("earth", "stereo", "north"):
         return i, {"from": val}
     nums = [float(x) for x in val.split(",")]
     return i, dict(lon=nums[0], lat=nums[1], roll=nums[2] if len(nums) > 2 else 0.0)
@@ -290,12 +290,12 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
     out.parent.mkdir(parents=True, exist_ok=True)
     sc = reconstruct(p, on, data_root)
 
-    names = {"earth": "Earth", "north": "North Pole", "stereo_b": "STEREO B"}
+    names = {"earth": "Earth", "north": "North Pole", "stereo": f"STEREO {p['stereo_sc']}"}
     imgs, titles, owners = [], [], []
     for i, v in enumerate(p["views"]):
         d, up, owner = view_geometry(v, p)
         wide = (6.0 if on["c2"] else None) if owner == "earth" else \
-            (6.0 if on["cor2"] else 4.0 if on["cor1"] else None) if owner == "stereo_b" else None
+            (6.0 if on["cor2"] else 4.0 if on["cor1"] else None) if owner == "stereo" else None
         fr = v.get("frame", [1.6, 0.0, 0.0])
         h = half if half is not None else (wide or fr[0])
         name = names.get(v.get("from")) or f"lon {v['lon']:g}°, lat {v['lat']:g}°"

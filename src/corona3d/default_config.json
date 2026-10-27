@@ -15,10 +15,11 @@
     357.372,
     4.993
   ],
-  "stereo_b": [
+  "stereo": [
     215.329,
     -0.984
   ],
+  "stereo_sc": "B",
   "gcs": {
     "height": 1.931,
     "kappa": 0.396,
@@ -101,7 +102,7 @@
       ]
     },
     {
-      "from": "stereo_b",
+      "from": "stereo",
       "frame": [
         1.455,
         -0.181,

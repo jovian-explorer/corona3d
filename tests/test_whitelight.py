@@ -102,3 +102,12 @@ def test_c2_frames_are_selected_from_their_headers(tmp_path):
     fr = _frames(tmp_path, "c2")
     assert [f[1][0].name for f in fr] == ["22478907.fts"]
     assert fr[0][0].strftime("%H:%M:%S") == "14:48:05"
+
+
+def test_cor1_triplets_of_the_normal_sequence_are_read(tmp_path):
+    """STEREO-A COR1 in 2024 writes its triplets as n4c1A (0, 120, 240 deg, 18 s apart)."""
+    for s in ("144100", "144118", "144136"):
+        h = fits.Header({"DATE-OBS": f"2024-05-09T{s[:2]}:{s[2:4]}:{s[4:]}.006"})
+        fits.PrimaryHDU(np.zeros((2, 2)), h).writeto(tmp_path / f"20240509_{s}_n4c1A.fts")
+    fr = _frames(tmp_path, "cor1", "A")
+    assert len(fr) == 1 and len(fr[0][1]) == 3 and _frames(tmp_path, "cor1", "B") == []

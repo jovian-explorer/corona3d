@@ -11,6 +11,16 @@ def default_config():
     return json.loads(files("corona3d").joinpath("default_config.json").read_text(encoding="utf-8"))
 
 
+def events():
+    """Names of the event presets: the default event and the files in corona3d/events/."""
+    return ["2013-10-25"] + sorted(f.name[:-5] for f in files("corona3d").joinpath("events").iterdir()
+                                   if f.name.endswith(".json"))
+
+
+def event(name):
+    return json.loads(files("corona3d").joinpath("events", f"{name}.json").read_text(encoding="utf-8"))
+
+
 def home(arg=None, must_exist=True):
     h = Path(arg or os.environ.get("CORONA3D_HOME") or Path.cwd()).resolve()
     if must_exist and not (h / "config.json").exists():

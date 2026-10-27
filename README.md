@@ -64,7 +64,7 @@ The model run and the images are public, and `corona3d fetch` downloads them int
 | MAS/MAST thermodynamic MHD run `cr2143-medium/hmi_mast_mas_std_0201` (density and magnetic field; the mesh of the Alfvén-speed file) | [PSI model archive](https://www.predsci.com/data/runs/) (Lionello et al. [2009](https://doi.org/10.1088/0004-637X/690/1/902); Mikić et al. [2018](https://doi.org/10.1038/s41550-018-0562-5)) | density surface, Alfvén speed, field lines |
 | SOHO/LASCO C2 images with the clear polariser (orange filter), level 0.5 | Virtual Solar Observatory through SunPy (Brueckner et al. [1995](https://doi.org/10.1007/BF00733434)) | Earth-view overlay, GCS fit |
 | STEREO-B/SECCHI COR1 polarisation triplets and COR2 total-brightness images, level 0.5; STEREO-A COR1 with `--cor1a` | Virtual Solar Observatory through SunPy (Howard et al. [2008](https://doi.org/10.1007/s11214-008-9341-4)) | STEREO-B-view overlay, GCS fit |
-| GCS parameters of the CME at 15:24 and 15:00 UT | fitted to LASCO C2 and COR1-A and -B with `scripts/gcs_fit.py` (METHODS.md, Section 7) | CME shell |
+| GCS parameters of the CME at 15:24 and 15:00 UT | fitted to LASCO C2 and COR1-A and -B with `corona3d gcs` (METHODS.md, Section 7) | CME shell |
 | NRH2 images (Stokes I, about 10 s) at 150.9 and 432 MHz | BASS2000 archive of the Paris Observatory, delivered on request; copied by the user into `data/nrh/` | radio layer |
 | OVRO-LWA spectral images (Stokes I, 10 s, 12 bands at 34 to 85 MHz), from 2024 April | [OVRO-LWA solar data](https://ovsa.njit.edu/docs/pages/ovro-lwa-solar-data-products/), public bucket on Amazon Web Services (CC BY 4.0); `corona3d fetch --ovro-lwa` | radio layer |
 | Other radio-source positions (optional) | supplied by the user | radio layer |

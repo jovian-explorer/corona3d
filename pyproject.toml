@@ -37,4 +37,4 @@ version = {attr = "corona3d.__version__"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-corona3d = ["default_config.json"]
+corona3d = ["default_config.json", "events/*.json"]

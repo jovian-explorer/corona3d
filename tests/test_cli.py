@@ -132,8 +132,8 @@ def test_views_can_be_set_for_every_panel():
     assert np.allclose(d, unit_vec(300, 0)) and np.allclose(up, [0, 0, 1]) and owner is None
     d, up, _ = view_geometry({"lon": 300.0, "lat": 0.0, "roll": 90.0}, p)
     assert np.allclose(up, np.cross(d, [0, 0, 1]))            # turned by 90 deg about the view axis
-    d, up, owner = view_geometry({"from": "stereo_b"}, p)
-    assert owner == "stereo_b" and np.allclose(d, unit_vec(*p["stereo_b"]))
+    d, up, owner = view_geometry({"from": "stereo"}, p)
+    assert owner == "stereo" and np.allclose(d, unit_vec(*p["stereo"]))
     d, up, _ = view_geometry({"from": "north"}, p)
     assert np.allclose(d, [0, 0, 1], atol=1e-9) and up @ unit_vec(*p["earth"]) < -0.99   # Earth below
     with pytest.raises(ValueError):

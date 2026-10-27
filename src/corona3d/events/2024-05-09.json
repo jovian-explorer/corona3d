@@ -1,0 +1,20 @@
+{
+  "event": "CME and type II burst of 2024-05-09 (X1.1 flare, AR 13664; Mother's Day storm)",
+  "time": "2024-05-09T17:32",
+  "run": "cr2284-high/hmi_mast_mas_std_0201",
+  "earth": [317.163, -3.229],
+  "stereo": [329.603, -1.688],
+  "stereo_sc": "A",
+  "gcs": {"height": 1.5, "kappa": 0.4, "alpha_deg": 30.0, "lon_stonyhurst": 30.0, "lat_deg": -18.0, "tilt_deg": -90.0},
+  "gcs_wl": {"time": "2024-05-09T18:52", "height": 6.0, "kappa": 0.4, "alpha_deg": 30.0, "lon_stonyhurst": 30.0, "lat_deg": -18.0, "tilt_deg": -90.0},
+  "radio_images": [
+    {"instrument": "ovro_lwa", "folder": "data/ovro_lwa", "freqs": [34.1, 52.4, 70.8, 84.6],
+     "start": "2024-05-09T17:32:40", "end": "2024-05-09T17:37:00", "step_s": 40, "level": 0.5,
+     "min_tb": 1e9, "contours": false}
+  ],
+  "wl_window": ["2024-05-09T14:40", "2024-05-09T19:40"],
+  "wl_time": "2024-05-09T18:52",
+  "views": [{"from": "earth", "frame": [1.6, 0.0, 0.0]},
+            {"from": "north", "frame": [1.6, 0.0, 0.0]},
+            {"from": "stereo", "frame": [1.6, 0.0, 0.0]}]
+}

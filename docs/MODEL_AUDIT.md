@@ -5,7 +5,7 @@ This file lists every place where a method or a number of corona3d determines wh
 The status of each item is given by one of the following words.
 * **sourced**: the method or value follows the cited work.
 * **choice**: a setting of corona3d, documented in METHODS.md but taken from no publication.
-* **fitted**: derived from the data by `scripts/gcs_fit.py`.
+* **fitted**: derived from the data by `corona3d gcs`.
 * **fixed**: wrong in version 0.0.1 and corrected in 0.1.0, with a test.
 
 ## Fixed in version 0.1.0
@@ -23,10 +23,10 @@ The status of each item is given by one of the following words.
 * **Test**: `test_cli.py::test_half_sets_the_scale_of_the_panels`.
 
 ### F3. The CME shell at 15:00 UT was collapsed and lay below the radio heights
-* **Where**: `default_config.json` (`gcs`), `scripts/gcs_fit.py`.
+* **Where**: `default_config.json` (`gcs`), `corona3d gcs`.
 * **Problem**: the shell had been refitted at 15:00 UT to EUV fronts, giving a half-angle of 1.07° (the two legs collapsed into one), an intersection over union of 0 in EUVI-A, and an apex at 1.443 R⊙, below both radio heights.
 * **Fix**: the shape of the 15:24 UT white-light fit is kept, and the apex height at 15:00 UT, 1.931 ± 0.158 R⊙, is extrapolated from the COR1-B front, as Morosan et al. (2022) scaled their shell back in time (METHODS.md, Section 7).
-* **Test**: there is no offline test, but the fit is reproducible with `python scripts/gcs_fit.py` and its result is kept in `scripts/gcs_fit_2013-10-25.json`.
+* **Test**: there is no offline test, but the fit is reproducible with `corona3d gcs` and its result is kept in `scripts/gcs_fit_2013-10-25.json`.
 
 ### F4. The streamer loops were selected by tuned parameters
 * **Where**: `reconstruction.py` (`reconstruct`).
@@ -94,8 +94,8 @@ In version 0.0.1, twenty-one statements of the README, METHODS.md, and the user 
 | Drawing radius of lines | `line_r_max` | 3 R⊙ | choice | | none |
 | Streamer loops | `reconstruction.py` | closed lines through the shell vertices above 1.02 R⊙ | fixed (F4) | | `test_streamer_lines_...` |
 | GCS model | `geometry.py` (`pythea_shell`) | PyThea, tilt + 90° | sourced | Thernisien (2011); Kouloumvakos et al. (2022) | `test_render_of_the_layers_that_need_no_data` |
-| GCS at 15:24 UT | `gcs_wl` | 5.538 R⊙, κ 0.396, α 23.46°, −53.262°, 3.146°, tilt −56.654° (PyThea) | fitted | `scripts/gcs_fit.py`, step 1 | none |
-| GCS at 15:00 UT | `gcs` | apex 1.931 ± 0.158 R⊙, shape as at 15:24 UT | fitted (F3) | `scripts/gcs_fit.py`, step 2 | none |
+| GCS at 15:24 UT | `gcs_wl` | 5.538 R⊙, κ 0.396, α 23.46°, −53.262°, 3.146°, tilt −56.654° (PyThea) | fitted | `corona3d gcs`, step 1 | none |
+| GCS at 15:00 UT | `gcs` | apex 1.931 ± 0.158 R⊙, shape as at 15:24 UT | fitted (F3) | `corona3d gcs`, step 2 | none |
 | Radio heights | `newkirk_r` | 4 × Newkirk, harmonic; 1.576 and 1.449 R⊙ | sourced | Newkirk (1961); Morosan et al. (2022) | `test_newkirk_heights_of_the_paper` |
 | Plasma frequency | `newkirk_r` | 8980 n_e^{1/2} Hz | sourced | standard | `test_newkirk_heights_of_the_paper` |
 | Arcsec to R⊙ | `radio_points` | angular solar radius at `time` | fixed (F6) | SunPy | none |

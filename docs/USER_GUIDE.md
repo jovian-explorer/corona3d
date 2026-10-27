@@ -50,9 +50,9 @@ cd corona3d_work
 corona3d init
 ```
 
-`corona3d init` writes `config.json` with the event of 2013 October 25 studied by Morosan et al. (2022). An existing `config.json` is never overwritten, so that an edited configuration is kept when `init` is given again.
+`corona3d init` writes `config.json` with the event of 2013 October 25 studied by Morosan et al. (2022). An existing `config.json` is never overwritten, so that an edited configuration is kept when `init` is given again. The option `--event` selects another preset instead: `corona3d init --event 2024-05-09` writes the configuration of the CME and type II burst of 2024 May 9 (Section 9.1), and `corona3d init --help` lists the presets that are installed.
 
-corona3d finds the working directory from the option `--home` given before the command (`corona3d --home D:\corona3d_work render`), then from the environment variable `CORONA3D_HOME`, and otherwise takes the current folder. Since a command given in a folder without `config.json` would fill that folder with data, `fetch` and `render` stop there with the advice to run `corona3d init` first.
+corona3d finds the working directory from the option `--home` given before the command (`corona3d --home D:\corona3d_work render`), then from the environment variable `CORONA3D_HOME`, and otherwise takes the current folder. Since a command given in a folder without `config.json` would fill that folder with data, `fetch`, `gcs`, and `render` stop there with the advice to run `corona3d init` first.
 
 After a download and two renderings, the directory contains
 
@@ -61,7 +61,7 @@ corona3d_work/
   config.json
   data/
     cr2143-medium_hmi_mast_mas_std_0201/   rho002.hdf, br002.hdf, bt002.hdf, bp002.hdf, va002.hdf (53 MB)
-    wl/                                     LASCO C2 and STEREO-B COR1 and COR2 images (about 75 MB)
+    wl/                                     LASCO C2 and STEREO COR1 and COR2 images (about 75 MB)
     nrh/                                    NRH image files, copied by the user (Section 5.7)
   figures/
     corona3d.png                            the three-panel figure
@@ -81,7 +81,7 @@ corona3d fetch --cor1a    # as above, and also the STEREO-A COR1 images used by 
 
 The model run is downloaded file by file from the archive of Predictive Science Inc. (PSI), at `https://www.predsci.com/data/runs/<run>/corona/`. A file that is already present is not downloaded again, a new file is written under its final name only when it is complete, and the partial file of a failed download is removed, so that giving the command again downloads exactly the files that are missing.
 
-The white-light images, namely the C2 images of the Large Angle and Spectrometric Coronagraph (LASCO) and the COR1 and COR2 images of the Solar Terrestrial Relations Observatory B (STEREO-B), are searched for and downloaded through the Virtual Solar Observatory with SunPy for the time window `wl_window` of the configuration. The search also returns products that corona3d does not draw (polarised C2 images, the COR1 sequences `s5c1B` and `n4c1B`, and the polarised COR2 sequence `n4c2B`), which are kept in `data/wl/` but are not read, except `s5c1B` by the GCS fit. After the download, every image is read once, and an image that cannot be read completely, such as one truncated by an interrupted transfer, is deleted. When files fail or are deleted, the command says so and ends with exit code 1, and giving it again downloads the missing files. On an ordinary connection, the whole download (about 130 MB) takes a few minutes.
+The white-light images, namely the C2 images of the Large Angle and Spectrometric Coronagraph (LASCO) and the COR1 and COR2 images of the Solar Terrestrial Relations Observatory (STEREO) spacecraft named by `stereo_sc` in the configuration (B for the event of 2013, A for events after 2014 October), are searched for and downloaded through the Virtual Solar Observatory with SunPy for the time window `wl_window` of the configuration. The search also returns products that corona3d does not draw (polarised C2 images, the COR1 sequences `s5c1` and `n4c1`, and the polarised COR2 sequence `n4c2`), which are kept in `data/wl/` but are not read, except `s5c1` by the GCS fit. After the download, every image is read once, and an image that cannot be read completely, such as one truncated by an interrupted transfer, is deleted. When files fail or are deleted, the command says so and ends with exit code 1, and giving it again downloads the missing files. On an ordinary connection, the whole download (about 130 MB) takes a few minutes.
 
 ## 4. Drawing the figure
 
@@ -89,7 +89,7 @@ The white-light images, namely the C2 images of the Large Angle and Spectrometri
 corona3d render
 ```
 
-draws the three-panel figure into `figures/corona3d.png`. By default, panel a shows the reconstruction from Earth, panel b from above the solar north pole with the direction of the Earth at the bottom, and panel c from STEREO-B, and Section 6 explains how to change them. The panels are drawn with an orthographic projection, so that every structure appears at its true size in R⊙ whatever its distance along the line of sight. The bottom of each panel states the model run and the time of the CME shell, and, where a coronagraph image is shown, the times of the image and of its base frame. With the default layers, the rendering takes about 40 s, most of which is spent on tracing the field lines. The options of `render` are:
+draws the three-panel figure into `figures/corona3d.png`. By default, panel a shows the reconstruction from Earth, panel b from above the solar north pole with the direction of the Earth at the bottom, and panel c from the STEREO spacecraft of the event, and Section 6 explains how to change them. The panels are drawn with an orthographic projection, so that every structure appears at its true size in R⊙ whatever its distance along the line of sight. The bottom of each panel states the model run and the time of the CME shell, and, where a coronagraph image is shown, the times of the image and of its base frame. With the default layers, the rendering takes about 40 s, most of which is spent on tracing the field lines. The options of `render` are:
 
 | Option | Effect |
 |---|---|
@@ -134,7 +134,7 @@ This layer draws in purple the closed field lines that pass through the CME shel
 
 ### 5.5 `gcs`: the CME shell (on)
 
-This layer draws the graduated cylindrical shell of the CME as rings around its axis in magenta. Without coronagraph images, the shell is drawn at the time of the reconstruction (key `gcs`, 15:00 UT). With any coronagraph layer on, it is drawn at the time of the images (key `gcs_wl`, 15:24 UT), so that the shell and the observed CME can be compared directly. The default parameters were fitted to the LASCO C2 and COR1 images with `scripts/gcs_fit.py` (METHODS.md, Section 7), and the parameters of another fit are entered under `gcs` and `gcs_wl` in `config.json` (Section 7).
+This layer draws the graduated cylindrical shell of the CME as rings around its axis in magenta. Without coronagraph images, the shell is drawn at the time of the reconstruction (key `gcs`, 15:00 UT). With any coronagraph layer on, it is drawn at the time of the images (key `gcs_wl`, 15:24 UT), so that the shell and the observed CME can be compared directly. The default parameters were fitted to the LASCO C2 and COR1 images with `corona3d gcs` (METHODS.md, Section 7), and the parameters of another fit are entered under `gcs` and `gcs_wl` in `config.json` (Section 7).
 
 ### 5.6 `c2`, `cor1`, and `cor2`: coronagraph images (off)
 
@@ -185,15 +185,15 @@ The numbers above only illustrate the format and are not measured positions. In 
 
 ## 6. The viewpoints
 
-Each panel looks at the reconstruction from a direction given by one entry of `views` in `config.json`, and the default entries are Earth, the solar north pole, and STEREO-B:
+Each panel looks at the reconstruction from a direction given by one entry of `views` in `config.json`, and the default entries are Earth, the solar north pole, and the STEREO spacecraft of the event (STEREO-B for the default event):
 
 ```json
 {"views": [{"from": "earth",    "frame": [1.513, 0.087, 0.158]},
            {"from": "north",    "frame": [1.554, 0.076, 0.104]},
-           {"from": "stereo_b", "frame": [1.455, -0.181, 0.093]}]}
+           {"from": "stereo", "frame": [1.455, -0.181, 0.093]}]}
 ```
 
-An entry names an observer with `"from"` (`"earth"`, `"stereo_b"`, or `"north"`), or gives the direction from which the Sun is seen as a Carrington longitude and latitude, `{"lon": 300, "lat": 20}`, in degrees. A view from a longitude and latitude has solar north up, and `"roll"` turns the panel counter-clockwise by that angle. The north-pole view looks down the rotation axis with the direction of the Earth at the bottom. Moreover, `"frame"` gives the half-height of the panel and the offset of Sun centre to the right and upwards, in R⊙ (default `[1.6, 0, 0]`), and `"title"` replaces the panel title. To look at the CME from behind, for example, panel b can be set to look from Carrington longitude 124°, opposite to the direction of the CME (Carrington longitude 304°, Stonyhurst longitude −53°).
+An entry names an observer with `"from"` (`"earth"`, `"stereo"`, which is STEREO-A or STEREO-B according to `stereo_sc`, or `"north"`), or gives the direction from which the Sun is seen as a Carrington longitude and latitude, `{"lon": 300, "lat": 20}`, in degrees. A view from a longitude and latitude has solar north up, and `"roll"` turns the panel counter-clockwise by that angle. The north-pole view looks down the rotation axis with the direction of the Earth at the bottom. Moreover, `"frame"` gives the half-height of the panel and the offset of Sun centre to the right and upwards, in R⊙ (default `[1.6, 0, 0]`), and `"title"` replaces the panel title. To look at the CME from behind, for example, panel b can be set to look from Carrington longitude 124°, opposite to the direction of the CME (Carrington longitude 304°, Stonyhurst longitude −53°).
 
 On the command line, `--view` sets one panel and may be repeated:
 
@@ -201,7 +201,7 @@ On the command line, `--view` sets one panel and may be repeated:
 corona3d render --view b=north          # panel b from above the north pole
 corona3d render --view c=300,20         # panel c from Carrington longitude 300, latitude 20
 corona3d render --view c=300,20,45      # the same, turned by 45 degrees
-corona3d render --view a=stereo_b --view c=earth
+corona3d render --view a=stereo --view c=earth
 ```
 
 The panels are labelled a, b, and c from left to right. A panel set with `--view` to a longitude and latitude uses the framing `[1.6, 0, 0]`, whereas a panel set to the observer it already had keeps its framing.
@@ -213,7 +213,7 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | Key | Default | Meaning |
 |---|---|---|
 | `event` | text | description of the event, for the user only |
-| `time` | `2013-10-25T15:00` | time of the CME shell `gcs` and of the angular solar radius used for the radio sources (the observers are set by `earth` and `stereo_b`) |
+| `time` | `2013-10-25T15:00` | time of the CME shell `gcs` and of the angular solar radius used for the radio sources (the observers are set by `earth` and `stereo`) |
 | `run` | `cr2143-medium/hmi_mast_mas_std_0201` | PSI MAS/MAST run, as its path in the PSI archive |
 | `density_scale` | 2.0 | factor applied to the model density (Morosan et al. 2022) |
 | `va_density` | `"scaled"` | density for the Alfvén speed: `"scaled"` (as the surface) or `"model"` |
@@ -221,9 +221,11 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | `ne_level` | 9 × 10⁷ | electron density of the surface, cm⁻³ |
 | `va_range` | [100, 700] | range of the Alfvén-speed colours, km s⁻¹ |
 | `sphere_r` | 1.2 | radius of the reference sphere, R⊙ |
-| `earth`, `stereo_b` | [357.372, 4.993], [215.329, −0.984] | Carrington longitude and latitude of the observers, degrees |
+| `earth`, `stereo` | [357.372, 4.993], [215.329, −0.984] | Carrington longitude and latitude of Earth and of the STEREO spacecraft, degrees |
+| `stereo_sc` | `"B"` | the STEREO spacecraft at `stereo`, `"A"` or `"B"`; it selects the COR1 and COR2 images and the title of the third panel |
 | `gcs` | height 1.931, kappa 0.396, alpha_deg 23.46, lon_stonyhurst −53.262, lat_deg 3.146, tilt_deg −146.654 | GCS shell at `time`: apex height (R⊙), aspect ratio, half-angle (deg), direction (Stonyhurst, deg), and tilt (deg; PyThea's tilt minus 90°) |
 | `gcs_wl` | time `2013-10-25T15:24`, height 5.538, the same shape | GCS shell at the time of the coronagraph images |
+| `gcs_fit` | none | provenance of a fit written by `corona3d gcs` (Section 9.3); later fits read it, the figure does not |
 | `mesh_rings` | 5, 10, width 3, `#c23ad8` | vertices of the shell along its legs and front, line width, and colour |
 | `n_seeds`, `seed_r` | 4500, 1.03 | number and radius of the footpoints of the open and closed lines |
 | `line_r_max` | 3.0 | field lines are drawn only within this radius, R⊙ |
@@ -236,7 +238,7 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | `wl_time` | `2013-10-25T15:24` | time of the white-light frames |
 | `wl_mode` | `"ratio"` | `"ratio"` (frame / base − 1) or `"difference"` (frame − base) |
 | `wl_opacity` | 0.75 | opacity of the coronagraph images |
-| `views` | Earth, north pole, STEREO-B | viewpoint, framing, and title of each panel (Section 6) |
+| `views` | Earth, north pole, STEREO | viewpoint, framing, and title of each panel (Section 6) |
 | `projection` | `"orthographic"` | `"orthographic"`, which draws every depth at the scale of the plane of the sky, or `"perspective"`, the camera of the published figure |
 | `camera_distance` | 6.65 | distance of the perspective camera at the default framing of each panel, R⊙ |
 | `window` | [1200, 918] | size of each panel image, pixels (the aspect of the panels of the published figure) |
@@ -272,11 +274,53 @@ print(newkirk_r(173))    # 1.576 R_sun
 
 ## 9. Another event or another model run
 
-corona3d is set up for the event of 2013 October 25, but every element of the event is a key of `config.json`, and another event is therefore prepared in the following steps.
+Every element of an event is a key of `config.json` (Section 7), and another event is therefore prepared from a preset (Section 9.1), from its time and flare position (Section 9.2), or by editing the keys directly (Section 9.4). In each case the shell of the CME is then fitted to the coronagraph images (Section 9.3).
+
+### 9.1 Event presets and STEREO-A
+
+`corona3d init --event NAME` writes the configuration of a preset. The preset `2013-10-25` is the default event of Morosan et al. (2022), and `2024-05-09` is the CME and type II burst of 2024 May 9, with the PSI run `cr2284-high`, the positions of Earth and STEREO-A, and the radio images of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA). The GCS values of the second preset are only a starting shell above the flare site and are replaced by the fit of Section 9.3.
+
+The key `stereo_sc` (`"A"` or `"B"`) states which STEREO spacecraft lies at the position `stereo`. STEREO-B lost contact with Earth in October 2014, and the events after that date therefore use STEREO-A. The third panel, the layers COR1 and COR2, the download of Section 3, and the entry `"from": "stereo"` of `views` all follow `stereo_sc`, so that the same commands work for both spacecraft.
+
+### 9.2 `corona3d new`: a new event from its time and flare position
+
+```
+mkdir event_work
+cd event_work
+corona3d new --time 2024-05-09T17:32 --flare S14W28
+```
+
+writes `config.json` for the event. The positions of Earth and of the STEREO spacecraft are computed at `--time` with SunPy and JPL Horizons, which needs a network connection, and the spacecraft is STEREO-B before 2014 October and STEREO-A afterwards. The PSI MAS/MAST run is the one of the Carrington rotation of the event, at medium resolution when it is listed in the PSI archive and otherwise at high resolution. The windows of the coronagraph and radio images are set around the time, the NRH images are set for 150.9 and 228 MHz, and the OVRO-LWA images are added from 2024 April onward. The flare position is given as latitude and then longitude of the heliographic position, so that S14W28 is 14° south and 28° west of the disc centre, and the shell starts above that site with typical parameters (aspect ratio 0.4, half-angle 30°). An existing `config.json` is replaced only when `--force` is given. `corona3d fetch` then downloads the data of the event.
+
+### 9.3 `corona3d gcs`: fitting the CME shell
+
+```
+corona3d fetch --wl --cor1a
+corona3d gcs --t-ref 2024-05-09T18:52 --t-out 2024-05-09T17:32 --flare 28 -14 --views c2,cor2a --fix-direction
+```
+
+fits the GCS shell to the images in `data/wl/` of the working directory in the two steps of METHODS.md, Section 7, which follow the procedure of Morosan et al. (2022). The six GCS parameters are fitted at `--t-ref` to the CME envelopes in the chosen instruments, and the shape found is kept while the apex height at `--t-out`, the time of the reconstruction, is extrapolated from the height-time profile of the CME front in the limb view. The fit needs scikit-image, so that the package must be installed with `pip install ".[fit]"`. The options are the following.
+
+| Option | Effect |
+|---|---|
+| `--wl DIR` | folder of the images (default `data/wl` of the working directory) |
+| `--t-ref T` | time of the six-parameter fit (default: the `gcs_wl` time of the configuration) |
+| `--t-out T` | time of the reconstruction (default: `time` of the configuration) |
+| `--flare LON LAT` | Stonyhurst longitude and latitude of the flare site in degrees, which seeds the envelopes (default: the site of the previous fit, otherwise the direction of the shell in the configuration; S06E69 for the default event) |
+| `--views LIST` | instruments, from `c2`, `cor1a`, `cor1b`, `cor2a`, `cor2b` (default `c2,cor1a,cor1b`) |
+| `--fix-direction` | keeps the axis of the shell at the flare site and fits only the height, the aspect ratio, the half-angle, and the tilt |
+| `--front INSTR` | instrument of the height-time profile (default: the instrument that sees the CME most nearly at the limb) |
+| `--running-diff MINUTES` | builds the envelopes from running differences, each frame minus the frame of the same observing programme nearest to MINUTES earlier, instead of the difference from the first frame; useful when earlier ejecta or a slow rise leave no signal against the first frame |
+| `--height-out R` and `--height-note TEXT` | give the apex height at `--t-out` in R⊙ by hand, for a CME whose rise at that time cannot be measured; step 2 is skipped, and the reason in `--height-note` (required) is written into `gcs_fit` together with `"height_source": "assumed"` |
+| `--skip-step1` | takes step 1 from the `gcs_fit.json` of the working directory and repeats only step 2 |
+
+The command writes two files into the working directory. `gcs_fit.json` holds the full result, namely the six parameters at both times, the height-time frames of the front, and the speed. In `config.json`, the keys `gcs` (at `--t-out`) and `gcs_wl` (at `--t-ref`) are replaced by the fitted shells, with the tilt of the configuration equal to the PyThea tilt minus 90°, and the new key `gcs_fit` records how they were obtained: the two times, the instruments, the intersection over union (IoU) of the shell with the envelope in each instrument, the instrument of the front, its speed in km s⁻¹, the apex height at `--t-out` with its uncertainty (`"height_source": "measured"`), the number of frames, the flare site, the interval of the running difference if one was used, and the parameters that were held fixed. An assumed height has no speed or uncertainty and is marked as such. The other keys of `config.json` are left unchanged. The fit of the default event reproduces the shell of Section 5.5 (apex height 1.931 ± 0.158 R⊙ at 15:00 UT, speed 1039 km s⁻¹), and its result is kept in `scripts/gcs_fit_2013-10-25.json` under the keys `t_ref` and `t_out`. The fit takes several minutes, since the shell is projected into every instrument for each trial of the optimisation.
+
+### 9.4 The manual route
 
 1. Choose a MAS/MAST run of the Carrington rotation of the event in the [PSI archive](https://www.predsci.com/data/runs/) and enter its path (for example `cr2143-medium/hmi_mast_mas_std_0201`) as `run`. The run must provide `rho002`, `br002`, `bt002`, `bp002`, and `va002` in its `corona/` folder.
-2. Enter the time as `time`, and keep `model_dlon` at 0.
-3. Compute the Carrington coordinates of the observers at that time with SunPy, and enter them as `earth` and `stereo_b`:
+2. Enter the time as `time`, keep `model_dlon` at 0, and set the white-light window and time as `wl_window` and `wl_time`.
+3. Compute the Carrington coordinates of Earth and of the STEREO spacecraft at that time, enter them as `earth` and `stereo`, and set `stereo_sc`:
    ```python
    from sunpy.coordinates import get_earth, get_horizons_coord, HeliographicCarrington
    t = "2013-10-25T15:00"
@@ -284,14 +328,8 @@ corona3d is set up for the event of 2013 October 25, but every element of the ev
        h = c.transform_to(HeliographicCarrington(observer="self", obstime=t))
        print(round(h.lon.deg, 3), round(h.lat.deg, 3))
    ```
-4. Set the white-light window and time as `wl_window` and `wl_time`, run `corona3d fetch --cor1a`, and fit the shell with
-   ```
-   python scripts/gcs_fit.py <working directory>/data/wl --out gcs_fit.json
-   ```
-   from a copy of the repository. The script fits the six GCS parameters to the CME envelopes in C2, COR1-A, and COR1-B at the time `T_REF` set at its top, and it extrapolates the apex height to the time `T_OUT` from the front in the limb view (METHODS.md, Section 7). The flare site `FLARE`, which seeds the envelopes, is also set at its top, and the results `t1500` and `t1524` go under `gcs` and `gcs_wl` (tilt minus 90°).
+4. Run `corona3d fetch --cor1a` and fit the shell with `corona3d gcs` (Section 9.3).
 5. Copy the NRH image files of the event into `data/nrh/`, set the burst interval and the frequencies of each instrument under `radio_images`, and, for OVRO-LWA, run `corona3d fetch --ovro-lwa`; other positions can be entered under `radio_sources`. Then run `corona3d render --radio`.
-
-The third observer and the coronagraph layers COR1 and COR2 are those of STEREO-B, which lost contact with Earth in October 2014. For events after that date, any panel can still be set to look from the position of STEREO-A entered as a longitude and latitude under `views`, but the COR1 and COR2 layers read only STEREO-B images.
 
 ## 10. How the results were checked
 
