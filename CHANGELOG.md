@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.1.0 (2026-10-27)
+
+A review of version 0.0.1 found errors in the physics, the code, the documentation, and the packaging; this version corrects all of them (`docs/MODEL_AUDIT.md`, items F1 to F9).
+
+- The model is no longer rotated by −8.243° in Carrington longitude (`model_dlon` = 0); MAS is a steady-state Carrington model, and the observers' longitudes already contain the solar rotation.
+- The panels are drawn with an orthographic projection, so that the model, the shell, the radio sources, and the coronagraph images share one scale; the perspective camera had magnified structures in front of the plane of the sky by up to 18 %.
+- The CME shell at 15:00 UT keeps the shape of the 15:24 UT white-light fit, and its apex height (1.931 ± 0.158 R⊙) is extrapolated from the COR1-B front (1039 km s⁻¹); the shell at 15:24 UT is drawn when coronagraph images are shown. The fit is reproducible with `scripts/gcs_fit.py`, and its result is kept in `scripts/gcs_fit_2013-10-25.json`.
+- The streamer loops are the closed field lines through the CME shell, selected without free parameters, in place of a tuned seed line.
+- Field lines are traced through the whole model (to 30.5 R⊙) with a step of 0.01 r and classed as open, closed, or undetermined; they are drawn within 3 R⊙ (`line_r_max`).
+- The viewpoint of every panel can be chosen (`views` in `config.json`, `--view` on the command line): Earth, STEREO-B, the north pole, or any Carrington longitude and latitude with a roll angle; the panel images are now `view_a.png`, `view_b.png`, and `view_c.png`.
+- `va_density` chooses the density from which the Alfvén speed is computed; radio positions in arcsec use the angular solar radius at the time of the event, and a position that cannot lie at its height produces a warning.
+- Coronagraph images are compared with the first frame of `wl_window` as a ratio by default (`wl_mode`), which removes vignetting; inputs that would draw a wrong or blank image are refused, COR1 triplets are grouped by time, frames of different size are resampled, and times with a time zone are accepted. Each panel states the times of the model, the shell, and the images.
+- Nested configuration keys are merged one by one; `make_figure` reads the working directory's `config.json` and writes inside it; `reconstruct` accepts partial parameters.
+- Downloads: damaged and partial files are removed, and `corona3d fetch` ends with exit code 1 when files fail; `--cor1a` adds the STEREO-A COR1 images for the GCS fit.
+- Python 3.12 or newer is required (PyThea 1.3); dependencies have lower bounds and PyThea is pinned to 1.3; the version has one source; a release workflow; CI installs HDF4 on macOS and runs the authorship tests.
+- The command line no longer loads VTK for `--version` and `init`, and figures are drawn without a GUI backend.
+- Offline tests of the MAS units and the Alfvén speed, the model rotation, the streamer selection, the undetermined lines, the radio warning, the coronagraph frames (five roll angles, ratio and difference, mixed sizes, refused inputs, C2 headers, COR1 triplets across a minute), the configuration merge, the panel scale, the viewpoints, and the downloads; 40 offline tests in all.
+- README, METHODS.md, and the user guide corrected against the code, and `docs/MODEL_AUDIT.md` added.
+
 ## 0.0.1 (2026-10-27)
 
 First pre-release, in a private repository.

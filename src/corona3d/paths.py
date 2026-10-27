@@ -19,11 +19,19 @@ def home(arg=None, must_exist=True):
     return h
 
 
+def merge(base, new):
+    """Copy of base with the keys of new; nested dictionaries are merged key by key."""
+    out = dict(base)
+    for k, v in (new or {}).items():
+        out[k] = merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
 def config(h):
-    """The default event, updated with the keys of the working directory's config.json."""
-    cfg = default_config()
-    cfg.update(json.loads((Path(h) / "config.json").read_text(encoding="utf-8")))
-    return cfg
+    """The default event, updated key by key with the working directory's config.json (if any)."""
+    f = Path(h) / "config.json"
+    user = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    return merge(default_config(), user)
 
 
 def model_dir(h, cfg):

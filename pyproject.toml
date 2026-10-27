@@ -1,29 +1,37 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "corona3d"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Three-dimensional reconstruction of a coronal mass ejection and the corona from public MHD, coronagraph, and radio data"
 readme = "README.md"
-requires-python = ">=3.10"
-license = {text = "MIT"}
+requires-python = ">=3.12"
+license = "MIT"
 authors = [{name = "Keshav Aggarwal", email = "keshavaggarwal2310@gmail.com"}]
 keywords = ["solar physics", "corona", "coronal mass ejection", "MHD", "Alfven speed", "radio bursts", "LASCO", "STEREO"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-dependencies = ["numpy", "scipy", "matplotlib", "pyvista", "pyhdf", "astropy", "sunpy[net,map]", "PyThea"]
+# lower bounds: the versions tested; PyThea pinned to its minor version (corona3d uses
+# gcs.rcenter_ and the vertex counts of its gcs class)
+dependencies = [
+    "numpy>=1.26", "scipy>=1.11", "matplotlib>=3.8", "pyvista>=0.43", "pyhdf>=0.11",
+    "astropy>=6.0", "sunpy[net,map]>=6.0", "PyThea>=1.3,<1.4",
+]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "pillow"]
+fit = ["scikit-image>=0.22"]
 
 [project.scripts]
 corona3d = "corona3d.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "corona3d.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

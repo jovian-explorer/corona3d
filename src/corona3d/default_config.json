@@ -3,7 +3,8 @@
   "time": "2013-10-25T15:00",
   "run": "cr2143-medium/hmi_mast_mas_std_0201",
   "density_scale": 2.0,
-  "model_dlon": -8.243,
+  "va_density": "scaled",
+  "model_dlon": 0.0,
   "ne_level": 90000000.0,
   "va_range": [
     100,
@@ -19,14 +20,22 @@
     -0.984
   ],
   "gcs": {
-    "height": 1.443,
-    "kappa": 0.334,
-    "alpha_deg": 1.071,
+    "height": 1.931,
+    "kappa": 0.396,
+    "alpha_deg": 23.46,
     "lon_stonyhurst": -53.262,
     "lat_deg": 3.146,
     "tilt_deg": -146.654
   },
-  "camera_distance": 6.65,
+  "gcs_wl": {
+    "time": "2013-10-25T15:24",
+    "height": 5.538,
+    "kappa": 0.396,
+    "alpha_deg": 23.46,
+    "lon_stonyhurst": -53.262,
+    "lat_deg": 3.146,
+    "tilt_deg": -146.654
+  },
   "mesh_rings": {
     "nbvertsl": 5,
     "nbvertcirc": 10,
@@ -35,13 +44,7 @@
   },
   "n_seeds": 4500,
   "seed_r": 1.03,
-  "streamer_flank": {
-    "r": 1.8,
-    "half_span": 60.0,
-    "n": 40,
-    "lon": -40.0
-  },
-  "streamer_min_apex": 1.9,
+  "line_r_max": 3.0,
   "radio_sources": [],
   "radio_radius": 0.12,
   "wl_window": [
@@ -49,26 +52,36 @@
     "2013-10-25T15:40"
   ],
   "wl_time": "2013-10-25T15:24",
+  "wl_mode": "ratio",
   "wl_opacity": 0.75,
-  "frame": {
-    "earth": [
-      1.513,
-      0.087,
-      0.158
-    ],
-    "north": [
-      1.554,
-      0.076,
-      0.104
-    ],
-    "stb": [
-      1.455,
-      -0.181,
-      0.093
-    ]
-  },
   "window": [
     1080,
     918
+  ],
+  "views": [
+    {
+      "from": "earth",
+      "frame": [
+        1.513,
+        0.087,
+        0.158
+      ]
+    },
+    {
+      "from": "north",
+      "frame": [
+        1.554,
+        0.076,
+        0.104
+      ]
+    },
+    {
+      "from": "stereo_b",
+      "frame": [
+        1.455,
+        -0.181,
+        0.093
+      ]
+    }
   ]
 }

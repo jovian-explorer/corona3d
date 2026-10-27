@@ -19,5 +19,5 @@ def test_fetch_and_render_from_public_data(tmp_path):
     main(["--home", str(tmp_path), "render", "--out", "figures/corona3d.png"])
     main(["--home", str(tmp_path), "render", "--c2", "--cor1", "--cor2", "--out", "figures/wl.png"])
     from PIL import Image
-    a = np.asarray(Image.open(tmp_path / "figures" / "view_earth.png").convert("L"), float)
+    a = np.asarray(Image.open(tmp_path / "figures" / "view_a.png").convert("L"), float)
     assert a.std() > 20                                    # a drawn panel, not a blank one

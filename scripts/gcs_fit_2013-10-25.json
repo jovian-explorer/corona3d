@@ -1,0 +1,51 @@
+{
+ "t1524": {
+  "height": 5.538,
+  "kappa": 0.396,
+  "alpha_deg": 23.46,
+  "lon_stonyhurst": -53.262,
+  "lat_deg": 3.146,
+  "tilt_pythea_deg": -56.654,
+  "iou": {
+   "c2": 0.761,
+   "cor1a": 0.854,
+   "cor1b": 0.744
+  }
+ },
+ "height_time": {
+  "instrument": "cor1b",
+  "projection": 1.0,
+  "frames": [
+   {
+    "time": "2013-10-25T15:08:21",
+    "height": 2.646,
+    "area_rsun2": 2.66
+   },
+   {
+    "time": "2013-10-25T15:13:21",
+    "height": 3.192,
+    "area_rsun2": 4.1
+   },
+   {
+    "time": "2013-10-25T15:18:21",
+    "height": 3.542,
+    "area_rsun2": 8.32
+   }
+  ]
+ },
+ "fit": {
+  "speed_rsun_per_min": 0.0896,
+  "speed_km_s": 1039.0,
+  "height_1500": 1.931,
+  "height_1500_err": 0.158,
+  "n_frames": 3
+ },
+ "t1500": {
+  "height": 1.931,
+  "kappa": 0.396,
+  "alpha_deg": 23.46,
+  "lon_stonyhurst": -53.262,
+  "lat_deg": 3.146,
+  "tilt_pythea_deg": -56.654
+ }
+}

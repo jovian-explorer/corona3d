@@ -1,4 +1,6 @@
 """Field-line tracing on the MAS grid, the GCS shell, and observer frames."""
+import warnings
+
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 from scipy.spatial.transform import Rotation
@@ -21,14 +23,24 @@ def observer_basis(lon_deg, lat_deg):
 
 def deproject(x_pos, y_pos, r, obs_lon, obs_lat):
     """Plane-of-sky (x west, y north, R_sun) at radial distance r -> Carrington Cartesian,
-    taking the solution on the observer side of the plane of sky."""
+    taking the solution on the observer side of the plane of sky. A position farther from Sun
+    centre than r cannot lie at r; it is kept in the plane of the sky, with a warning."""
     ex, ey, ez = observer_basis(obs_lon, obs_lat)
-    z = np.sqrt(np.clip(r**2 - x_pos**2 - y_pos**2, 0, None))
+    rho2 = np.asarray(x_pos) ** 2 + np.asarray(y_pos) ** 2
+    if (rho2 > r**2).any():
+        warnings.warn(f"{int((rho2 > r**2).sum())} radio position(s) lie farther than {r:.3f} R_sun "
+                      "from Sun centre in the plane of the sky; kept in the plane of the sky")
+    z = np.sqrt(np.clip(r**2 - rho2, 0, None))
     return np.outer(x_pos, ex) + np.outer(y_pos, ey) + np.outer(z, ez)
 
 
 # ---------------------------------------------------------------- field lines
+OPEN, CLOSED, UNDETERMINED = "open", "closed", "undetermined"
+
+
 class FieldTracer:
+    """RK4 integration along the unit vector of B, with a step proportional to r."""
+
     def __init__(self, m):
         self.r_min, self.r_max = m["r"][0], m["r"][-1]
         axes = (m["phi"], m["theta"], m["r"])
@@ -49,44 +61,50 @@ class FieldTracer:
         b = np.c_[bx, by, bz]
         return b / np.maximum(np.linalg.norm(b, axis=1, keepdims=True), 1e-30)
 
-    def trace(self, seeds, ds=0.01, n_steps=800, sign=1.0):
-        """RK4 trace of all seeds in one direction; returns list of (n,3) arrays."""
-        p = seeds.copy()
+    def trace(self, seeds, ds=0.01, n_steps=1500, sign=1.0):
+        """Trace all seeds in one direction with steps of ds * r [R_sun]; returns a list of
+        (n, 3) arrays, each ending at the first point outside [r_min, r_max] or after n_steps."""
+        p = np.array(seeds, float)
         alive = np.ones(len(p), bool)
-        paths = [p.copy()]
-        for _ in range(n_steps):
+        P = np.empty((len(p), n_steps + 1, 3), np.float32)
+        P[:, 0] = p
+        last = np.full(len(p), n_steps)
+        for k in range(n_steps):
             idx = np.nonzero(alive)[0]
             if idx.size == 0:
+                last[:] = np.minimum(last, k)
                 break
             q = p[idx]
+            h = (ds * sign * np.linalg.norm(q, axis=1))[:, None]
             k1 = self.direction(q)
-            k2 = self.direction(q + 0.5 * ds * sign * k1)
-            k3 = self.direction(q + 0.5 * ds * sign * k2)
-            k4 = self.direction(q + ds * sign * k3)
-            q = q + ds * sign * (k1 + 2 * k2 + 2 * k3 + k4) / 6
-            p[idx] = q
-            r = np.linalg.norm(q, axis=1)
-            alive[idx[(r < self.r_min) | (r > self.r_max)]] = False
-            paths.append(p.copy())
-        P = np.stack(paths, axis=1)                    # (nseed, nstep, 3)
-        out = []
-        for i in range(len(seeds)):
-            r = np.linalg.norm(P[i], axis=1)
-            # keep until the first exit, then drop the frozen repeats
-            stop = np.argmax((r < self.r_min) | (r > self.r_max)) or len(r) - 1
-            out.append(P[i, : stop + 1])
-        return out
+            k2 = self.direction(q + 0.5 * h * k1)
+            k3 = self.direction(q + 0.5 * h * k2)
+            k4 = self.direction(q + h * k3)
+            p[idx] = q + h * (k1 + 2 * k2 + 2 * k3 + k4) / 6
+            P[:, k + 1] = p
+            r = np.linalg.norm(p[idx], axis=1)
+            out = idx[(r < self.r_min) | (r > self.r_max)]
+            alive[out] = False
+            last[out] = k + 1
+        return [P[i, : last[i] + 1].astype(float) for i in range(len(p))]
 
     def field_lines(self, seeds, **kw):
-        """Trace both ways; return list of (points, is_open)."""
+        """Trace both ways; return a list of (points, kind): kind is OPEN when one end leaves
+        the outer boundary, CLOSED when both ends return to the inner boundary, and
+        UNDETERMINED otherwise (a line that ran out of steps or stalled where B vanishes)."""
         fw = self.trace(seeds, sign=+1.0, **kw)
         bw = self.trace(seeds, sign=-1.0, **kw)
         lines = []
         for a, b in zip(fw, bw):
             pts = np.vstack([b[::-1], a[1:]])
-            r_end = np.linalg.norm(pts[[0, -1]], axis=1)
-            is_open = bool((r_end > self.r_max - 0.05).any())
-            lines.append((pts, is_open))
+            r0, r1 = np.linalg.norm(pts[[0, -1]], axis=1)
+            if r0 > self.r_max or r1 > self.r_max:
+                kind = OPEN
+            elif r0 < self.r_min and r1 < self.r_min:
+                kind = CLOSED
+            else:
+                kind = UNDETERMINED
+            lines.append((pts, kind))
         return lines
 
 
@@ -99,7 +117,7 @@ def fibonacci_sphere(n, r=1.0):
 
 # ---------------------------------------------------------------- GCS shell
 def pythea_shell(height, kappa, alpha_deg, lon_stonyhurst, lat_deg, tilt_pythea_deg,
-                 earth_carr_lon, obstime="2013-10-25 15:00", **n):
+                 earth_carr_lon, obstime, **n):
     """GCS shell from PyThea (Thernisien skeleton, PyThea conventions), returned as
     rings (n_axis, n_circle, 3) in Carrington-Cartesian R_sun."""
     import astropy.units as u

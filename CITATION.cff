@@ -7,19 +7,19 @@ authors:
     given-names: Keshav
     affiliation: "Space Physics Laboratory (SPL), Vikram Sarabhai Space Centre (VSSC), ISRO"
     email: keshavaggarwal2310@gmail.com
-version: 0.0.1
+version: 0.1.0
 license: MIT
 date-released: 2026-10-27
 abstract: >-
   corona3d is a Python package that builds a three-dimensional reconstruction of a coronal mass
   ejection (CME) and the corona it propagates through, from public data only. It draws the electron-density
   surface of a PSI MAS/MAST magnetohydrodynamic model at a chosen plasma level coloured by the
-  Alfven speed, open and closed coronal field lines and the streamer loops above the CME flank,
+  Alfven speed, open and closed coronal field lines and the closed lines through the CME shell,
   the graduated cylindrical shell of the CME, radio sources placed at their Newkirk heights, and
-  base-difference images of LASCO C2 and STEREO-B COR1 and COR2 placed in the plane of the sky of
-  their spacecraft, seen from Earth, from above the solar north pole, and from STEREO-B. Every
-  layer can be switched on or off, and the default configuration rebuilds the reconstruction of the CME of
-  2013 October 25 studied by Morosan et al. (2022).
+  images of LASCO C2 and STEREO-B COR1 and COR2 placed in the plane of the sky of their
+  spacecraft, drawn with an orthographic projection from Earth, STEREO-B, the solar north pole, or
+  any chosen direction. Every layer can be switched on or off, and the default configuration
+  rebuilds the reconstruction of the CME of 2013 October 25 studied by Morosan et al. (2022).
 repository-code: "https://github.com/jovian-explorer/corona3d"
 url: "https://jovian-explorer.github.io/software.html#corona3d"
 keywords:
