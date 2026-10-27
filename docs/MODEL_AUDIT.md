@@ -1,8 +1,8 @@
 # Model audit: every method, model, and number of corona3d
 
-This file lists every place where corona3d decides, with a method or a number, what the reconstruction shows. For each item it gives where the code is, the value used, the literature source when there is one, and the offline test that checks it. Every reference with a DOI was checked against its registry record with Argus and is listed in `docs/refs.bib`.
+This file lists every place where a method or a number of corona3d determines what the reconstruction shows. For each item, it gives the location in the code, the value used, the literature source when there is one, and the offline test that checks it. Every reference with a DOI was checked against its registry record with Argus and is listed in `docs/refs.bib`.
 
-Status words:
+The status of each item is given by one of the following words.
 * **sourced**: the method or value follows the cited work.
 * **choice**: a setting of corona3d, documented in METHODS.md but taken from no publication.
 * **fitted**: derived from the data by `scripts/gcs_fit.py`.
@@ -13,20 +13,20 @@ Status words:
 ### F1. The model was rotated by −8.243° without a physical reason
 * **Where**: `default_config.json` (`model_dlon`), `reconstruction.py` (`reconstruct`).
 * **Problem**: MAS is a steady-state model in Carrington coordinates, and the observers' Carrington longitudes at 15:00 UT already contain the solar rotation, so that rotating the model as well offset it from the GCS shell by 8.2° in longitude.
-* **Fix**: `model_dlon` = 0 by default; the rotation remains available as an option.
+* **Fix**: `model_dlon` = 0 by default, while the rotation remains available as an option.
 * **Test**: `test_model.py::test_model_rotation_turns_the_surface_eastward_or_westward`.
 
 ### F2. The perspective camera magnified structures in front of the coronagraph planes
 * **Where**: `reconstruction.py` (`render`).
 * **Problem**: with the camera 6.65 R⊙ from the Sun, a structure 1 R⊙ in front of the plane of the sky was drawn 18 % larger than the coronagraph image, so that the model and the image did not share one scale.
-* **Fix**: orthographic projection; `camera_distance` removed.
+* **Fix**: the panels are drawn with an orthographic projection, and `camera_distance` was removed.
 * **Test**: `test_cli.py::test_half_sets_the_scale_of_the_panels`.
 
 ### F3. The CME shell at 15:00 UT was collapsed and lay below the radio heights
 * **Where**: `default_config.json` (`gcs`), `scripts/gcs_fit.py`.
 * **Problem**: the shell had been refitted at 15:00 UT to EUV fronts, giving a half-angle of 1.07° (the two legs collapsed into one), an intersection over union of 0 in EUVI-A, and an apex at 1.443 R⊙, below both radio heights.
 * **Fix**: the shape of the 15:24 UT white-light fit is kept, and the apex height at 15:00 UT, 1.931 ± 0.158 R⊙, is extrapolated from the COR1-B front, as Morosan et al. (2022) scaled their shell back in time (METHODS.md, Section 7).
-* **Test**: none offline; the fit is reproducible with `python scripts/gcs_fit.py` and its result is kept in `scripts/gcs_fit_2013-10-25.json`.
+* **Test**: there is no offline test, but the fit is reproducible with `python scripts/gcs_fit.py` and its result is kept in `scripts/gcs_fit_2013-10-25.json`.
 
 ### F4. The streamer loops were selected by tuned parameters
 * **Where**: `reconstruction.py` (`reconstruct`).
@@ -37,7 +37,7 @@ Status words:
 ### F5. Field lines were classed as open at 3 R⊙, and unfinished lines as closed
 * **Where**: `geometry.py` (`FieldTracer`), `mast_model.py` (`load`).
 * **Problem**: the model was cut at 3 R⊙, so that loops closing above it near the streamer cusp counted as open, and any line that was not open, including one that ran out of steps, counted as closed.
-* **Fix**: lines are traced through the whole run (to 30.5 R⊙) with a step of 0.01 r and classed as open, closed, or undetermined; undetermined lines are counted and not drawn, and lines are drawn within `line_r_max` = 3 R⊙.
+* **Fix**: lines are traced through the whole run (to 30.5 R⊙) with a step of 0.01 r and classed as open, closed, or undetermined. Undetermined lines are counted and not drawn, and the other lines are drawn within `line_r_max` = 3 R⊙.
 * **Tests**: `test_geometry.py::test_tracer_follows_dipole_field_lines`, `test_a_line_that_runs_out_of_steps_is_undetermined`.
 
 ### F6. Radio positions in arcsec used the solar radius at 1 AU, and clipped positions passed silently
@@ -75,7 +75,7 @@ Status words:
 * **Tests**: `test_cli.py`.
 
 ### F9. The documentation disagreed with the code
-Twenty-one statements of the README, METHODS.md, and the user guide disagreed with the code in version 0.0.1. They concerned error messages, the meaning of `time`, the base frame, the output paths of `make_figure`, the C2 filter, the use of `va002`, download sizes, the COR2 framing, the 173 MHz density level, and the descriptions of the tests. They were corrected against the code of version 0.1.0.
+In version 0.0.1, twenty-one statements of the README, METHODS.md, and the user guide disagreed with the code. These statements concerned the error messages, the meaning of `time`, the base frame, the output paths of `make_figure`, the C2 filter, the use of `va002`, the download sizes, the COR2 framing, the 173 MHz density level, and the descriptions of the tests, and all of them were corrected against the code of version 0.1.0.
 
 ## Methods and values
 

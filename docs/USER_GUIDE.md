@@ -1,6 +1,6 @@
 # corona3d user guide
 
-This guide describes corona3d as it is in this repository: how to install it and prepare a working directory, how the public data are downloaded, what each layer of the reconstruction shows and how it is switched on or off, how the viewpoint of each panel is chosen, how every parameter of the configuration acts on the figure, how corona3d is used from Python, how far its results can be trusted, and what to do when something does not work. The computation behind each layer, with its sources, is described in [METHODS.md](../METHODS.md), every method and number is listed with its source and its test in [MODEL_AUDIT.md](MODEL_AUDIT.md), and the changes between versions are recorded in [CHANGELOG.md](../CHANGELOG.md).
+This guide describes corona3d as it is in this repository: how to install it and prepare a working directory, how the public data are downloaded, what each layer of the reconstruction shows and how it is switched on or off, how the viewpoint of each panel is chosen, how every parameter of the configuration acts on the figure, how corona3d is used from Python, how far its results can be trusted, and what to do when something does not work. Moreover, the computation behind each layer is described with its sources in [METHODS.md](../METHODS.md), every method and number is listed with its source and its test in [MODEL_AUDIT.md](MODEL_AUDIT.md), and the changes between versions are recorded in [CHANGELOG.md](../CHANGELOG.md).
 
 Contents
 
@@ -22,13 +22,13 @@ Contents
 
 ## 1. Install and start
 
-corona3d needs Python 3.12 or newer, because PyThea 1.3, which builds the CME shell, needs it, and runs on Windows, macOS, and Linux. It is not on PyPI, and pip installs it from the GitHub repository, which is private at present, so that the account used by git must have access to it:
+corona3d runs on Windows, macOS, and Linux and needs Python 3.12 or newer, because PyThea 1.3, which builds the shell of the coronal mass ejection (CME), requires it. Since corona3d is not on PyPI, pip installs it from the GitHub repository, which is private at present, and the account used by git must therefore have access to it:
 
 ```
 pip install "git+https://github.com/jovian-explorer/corona3d.git"
 ```
 
-To work on the code, to run the tests, or to run the GCS fit of Section 9, install it from a copy of the repository in editable mode, together with pytest, Pillow, and scikit-image:
+To work on the code, run the tests, or run the fit of the graduated cylindrical shell (GCS) described in Section 9, install it from a copy of the repository in editable mode, together with pytest, Pillow, and scikit-image:
 
 ```
 git clone https://github.com/jovian-explorer/corona3d.git
@@ -36,7 +36,7 @@ cd corona3d
 pip install -e ".[test,fit]"
 ```
 
-pip installs NumPy, SciPy, and Matplotlib for the computation and the figure, PyVista and the Visualization Toolkit (VTK) for the three-dimensional rendering, pyhdf for the HDF4 files of the MHD model, Astropy and SunPy for the coronagraph images and their coordinates, and PyThea for the GCS shell of the CME. pyhdf provides wheels for Windows, Linux, and recent macOS on Apple processors; on other Macs, the HDF4 library must be installed first with `brew install hdf4`, and `conda install -c conda-forge pyhdf` is an alternative on any system. The renderings are drawn off screen, so that no window opens and corona3d also runs on a server, provided that VTK finds an OpenGL implementation (Section 13).
+pip installs NumPy, SciPy, and Matplotlib for the computation and the figure, PyVista and the Visualization Toolkit (VTK) for the three-dimensional rendering, pyhdf for the HDF4 files of the magnetohydrodynamic (MHD) model, Astropy and SunPy for the coronagraph images and their coordinates, and PyThea for the GCS shell of the CME. pyhdf provides wheels for Windows, Linux, and recent macOS on Apple processors. On other Macs, the HDF4 library must be installed first with `brew install hdf4`, while `conda install -c conda-forge pyhdf` is an alternative on any system. Since the renderings are drawn off screen, no window opens, and corona3d therefore also runs on a server, provided that VTK finds an OpenGL implementation (Section 13).
 
 After the installation, the command `corona3d` is available in the terminal (`python -m corona3d` does the same), and `corona3d --version` prints the version.
 
@@ -50,9 +50,9 @@ cd corona3d_work
 corona3d init
 ```
 
-`corona3d init` writes `config.json` with the event of 2013 October 25 studied by Morosan et al. (2022). An existing `config.json` is never overwritten, so that a configuration that has been edited is kept when `init` is given again.
+`corona3d init` writes `config.json` with the event of 2013 October 25 studied by Morosan et al. (2022). An existing `config.json` is never overwritten, so that an edited configuration is kept when `init` is given again.
 
-The working directory is found in the following order: the option `--home` given before the command (`corona3d --home D:\corona3d_work render`), the environment variable `CORONA3D_HOME`, and otherwise the current folder. Since a command given in a folder without `config.json` would fill that folder with data, `fetch` and `render` stop there with the advice to run `corona3d init` first.
+corona3d finds the working directory from the option `--home` given before the command (`corona3d --home D:\corona3d_work render`), then from the environment variable `CORONA3D_HOME`, and otherwise takes the current folder. Since a command given in a folder without `config.json` would fill that folder with data, `fetch` and `render` stop there with the advice to run `corona3d init` first.
 
 After a download and two renderings, the directory contains
 
@@ -78,9 +78,9 @@ corona3d fetch --wl       # only the white-light images
 corona3d fetch --cor1a    # as above, and also the STEREO-A COR1 images used by the GCS fit
 ```
 
-The model run is downloaded from the archive of Predictive Science Inc. (PSI), file by file, from `https://www.predsci.com/data/runs/<run>/corona/`. A file that is already present is not downloaded again. A file is written under its final name only when it is complete, and the partial file of a failed download is removed, so that giving the command again downloads exactly the files that are missing.
+The model run is downloaded file by file from the archive of Predictive Science Inc. (PSI), at `https://www.predsci.com/data/runs/<run>/corona/`. A file that is already present is not downloaded again, a new file is written under its final name only when it is complete, and the partial file of a failed download is removed, so that giving the command again downloads exactly the files that are missing.
 
-The white-light images are searched for and downloaded through the Virtual Solar Observatory with SunPy, for the time window `wl_window` of the configuration: LASCO C2 images, and the COR1 and COR2 images of STEREO-B. The search also returns products that corona3d does not draw (polarised C2 images, the COR1 sequences `s5c1B` and `n4c1B`, and the polarised COR2 sequence `n4c2B`); they are kept in `data/wl/` but are not read, except `s5c1B` by the GCS fit. After the download, every image is read once, and an image that cannot be read completely, such as one truncated by an interrupted transfer, is deleted. When files fail or are deleted, the command says so and ends with exit code 1, and giving it again downloads the missing files. On an ordinary connection, the whole download (about 130 MB) takes a few minutes.
+The white-light images, namely the C2 images of the Large Angle and Spectrometric Coronagraph (LASCO) and the COR1 and COR2 images of the Solar Terrestrial Relations Observatory B (STEREO-B), are searched for and downloaded through the Virtual Solar Observatory with SunPy for the time window `wl_window` of the configuration. The search also returns products that corona3d does not draw (polarised C2 images, the COR1 sequences `s5c1B` and `n4c1B`, and the polarised COR2 sequence `n4c2B`), which are kept in `data/wl/` but are not read, except `s5c1B` by the GCS fit. After the download, every image is read once, and an image that cannot be read completely, such as one truncated by an interrupted transfer, is deleted. When files fail or are deleted, the command says so and ends with exit code 1, and giving it again downloads the missing files. On an ordinary connection, the whole download (about 130 MB) takes a few minutes.
 
 ## 4. Drawing the figure
 
@@ -88,7 +88,7 @@ The white-light images are searched for and downloaded through the Virtual Solar
 corona3d render
 ```
 
-draws the three-panel figure into `figures/corona3d.png`: by default panel a shows the reconstruction from Earth, panel b from above the solar north pole with the direction of the Earth at the bottom, and panel c from STEREO-B (Section 6 explains how to change them). The panels are drawn with an orthographic projection, so that every structure appears at its true size in R⊙ whatever its distance along the line of sight. The bottom of each panel states the model run and the time of the CME shell, and, where a coronagraph image is shown, the times of the image and of its base frame. With the default layers, the rendering takes about 40 s, most of it the tracing of the field lines. The options of `render` are:
+draws the three-panel figure into `figures/corona3d.png`. By default, panel a shows the reconstruction from Earth, panel b from above the solar north pole with the direction of the Earth at the bottom, and panel c from STEREO-B, and Section 6 explains how to change them. The panels are drawn with an orthographic projection, so that every structure appears at its true size in R⊙ whatever its distance along the line of sight. The bottom of each panel states the model run and the time of the CME shell, and, where a coronagraph image is shown, the times of the image and of its base frame. With the default layers, the rendering takes about 40 s, most of which is spent on tracing the field lines. The options of `render` are:
 
 | Option | Effect |
 |---|---|
@@ -99,7 +99,7 @@ draws the three-panel figure into `figures/corona3d.png`: by default panel a sho
 | `--wl-time T` | time of the coronagraph frames, e.g. `2013-10-25T15:12`; the frame nearest to it within `wl_window` is taken for each instrument |
 | `--radio-sources JSON` | radio sources for the radio layer (Section 5.7) |
 
-`corona3d render --help` lists every option and, at its end, the names of the layers. Some combinations that are useful in practice:
+`corona3d render --help` lists every option and, at its end, the names of the layers. Some combinations that are useful in practice are the following:
 
 ```
 corona3d render --no-open --no-closed --out figures/surface.png          # the density surface, the streamer, and the CME only
@@ -117,27 +117,27 @@ Each layer is switched on with `--<name>` and off with `--no-<name>`, and only t
 
 ### 5.1 `surface`: the density surface coloured by the Alfvén speed (on)
 
-The surface on which the electron density of the MHD model equals `ne_level` (9 × 10⁷ cm⁻³ by default, the level that Morosan et al. (2022) used for the 173 MHz harmonic emission; the exact value for 173 MHz is 9.28 × 10⁷ cm⁻³). The colour gives the Alfvén speed on the surface, over `va_range` (100 km s⁻¹ in blue to 700 km s⁻¹ in red), on the colour bar below the panels. By default the Alfvén speed is computed from the doubled density of the surface; `"va_density": "model"` computes it from the density of the model, which raises it by a factor of √2. Blue regions are where a shock of a few hundred km s⁻¹ becomes strongly super-Alfvénic. The colour bar is drawn only when this layer is on.
+This layer draws the surface on which the electron density of the MHD model equals `ne_level`, by default 9 × 10⁷ cm⁻³, the level that Morosan et al. (2022) used for the 173 MHz harmonic emission (the exact value for 173 MHz is 9.28 × 10⁷ cm⁻³). The colour gives the Alfvén speed on the surface over `va_range` (100 km s⁻¹ in blue to 700 km s⁻¹ in red), on the colour bar below the panels, and this colour bar is drawn only when the layer is on. By default, the Alfvén speed is computed from the doubled density of the surface, whereas `"va_density": "model"` computes it from the density of the model, which raises it by a factor of √2. The blue regions mark where a shock of a few hundred km s⁻¹ becomes strongly super-Alfvénic.
 
 ### 5.2 `sphere`: the reference sphere (on)
 
-A grey sphere of radius `sphere_r` = 1.2 R⊙. Where the sphere is visible through the surface, the density level lies below 1.2 R⊙, so that the sphere is a reference of height.
+This layer draws a grey sphere of radius `sphere_r` = 1.2 R⊙, which provides a reference of height, since the density level lies below 1.2 R⊙ wherever the sphere is visible through the surface.
 
 ### 5.3 `open` and `closed`: field lines (on)
 
-Field lines traced from 4,500 footpoints spread uniformly at 1.03 R⊙. Every line is traced through the whole model, out to 30.5 R⊙. A line that leaves the outer boundary is open and drawn in black, a line whose two ends return to the Sun is closed and drawn in grey, and a line that is neither is counted as undetermined and not drawn; the numbers of each kind are printed at every rendering. Both kinds are nearly transparent, so that the surface remains visible, and both are drawn only within `line_r_max` = 3 R⊙. Open lines mark where electrons accelerated by the shock can escape into the heliosphere; closed lines mark where they remain trapped.
+These layers draw the field lines traced from 4,500 footpoints spread uniformly at 1.03 R⊙, and every line is traced through the whole model, out to 30.5 R⊙. A line that leaves the outer boundary is open and drawn in black, a line whose two ends return to the Sun is closed and drawn in grey, and a line that is neither is counted as undetermined and not drawn, while the numbers of each kind are printed at every rendering. Both kinds are nearly transparent, so that the surface remains visible, and both are drawn only within `line_r_max` = 3 R⊙. The open lines mark where electrons accelerated by the shock can escape into the heliosphere, whereas the closed lines mark where they remain trapped.
 
 ### 5.4 `streamer`: the closed field lines through the CME shell (on)
 
-The closed field lines that pass through the CME shell, in purple. They are traced from every vertex of the shell, and the closed ones are kept, so that they are the loops of the streamer that the CME meets, selected without any free parameter. For the default event, 478 of the 943 lines through the shell are closed. When a coronagraph layer is on and the shell is drawn at the time of the images (Section 5.5), these lines still belong to the shell at the time of the reconstruction (15:00 UT).
+This layer draws in purple the closed field lines that pass through the CME shell. The lines are traced from every vertex of the shell and only the closed ones are kept, so that they are the loops of the streamer that the CME meets, selected without any free parameter. For the default event, 478 of the 943 lines through the shell are closed. When a coronagraph layer is on and the shell is drawn at the time of the images (Section 5.5), these lines still belong to the shell at the time of the reconstruction (15:00 UT).
 
 ### 5.5 `gcs`: the CME shell (on)
 
-The graduated cylindrical shell of the CME, drawn as rings around its axis in magenta. Without coronagraph images, the shell is drawn at the time of the reconstruction (key `gcs`, 15:00 UT). With any coronagraph layer on, it is drawn at the time of the images (key `gcs_wl`, 15:24 UT), so that the shell and the observed CME can be compared directly. The default parameters were fitted to the LASCO C2 and COR1 images with `scripts/gcs_fit.py` (METHODS.md, Section 7). The parameters of another fit are entered under `gcs` and `gcs_wl` in `config.json` (Section 7).
+This layer draws the graduated cylindrical shell of the CME as rings around its axis in magenta. Without coronagraph images, the shell is drawn at the time of the reconstruction (key `gcs`, 15:00 UT). With any coronagraph layer on, it is drawn at the time of the images (key `gcs_wl`, 15:24 UT), so that the shell and the observed CME can be compared directly. The default parameters were fitted to the LASCO C2 and COR1 images with `scripts/gcs_fit.py` (METHODS.md, Section 7), and the parameters of another fit are entered under `gcs` and `gcs_wl` in `config.json` (Section 7).
 
 ### 5.6 `c2`, `cor1`, and `cor2`: coronagraph images (off)
 
-Images of the coronagraphs, compared with the first frame of the download window: LASCO C2 in a view from Earth, and COR1 and COR2 of STEREO-B in a view from STEREO-B. A view from elsewhere shows no image, since only from its own spacecraft does an image cover the model at its true place. Each image is the frame nearest to `wl_time` divided by the first frame of the window minus one (`wl_mode` = `"ratio"`), or the difference of the two (`"difference"`), after both were normalised by their exposure times. The ratio removes vignetting and other multiplicative instrumental effects. The result is rotated to solar north up and drawn on the plane through Sun centre perpendicular to the line of sight of the spacecraft. Bright regions are where the brightness increased since the base frame, in particular the CME and the material that it displaces, and dark regions are where it decreased. The occulter and the region outside the field of view are transparent: C2 covers 2.2 to 6 R⊙, COR1 1.5 to 4 R⊙, and COR2 4 to 15 R⊙. When one of these layers is on, the panel of its spacecraft is widened (Section 4), and the lines and the surface keep their size in R⊙, so that they appear smaller. Since the default panel reaches 6 R⊙, only the inner part of the COR2 field appears; `--half 15` shows all of it.
+These layers draw the coronagraph images, compared with the first frame of the download window, with LASCO C2 in a view from Earth and COR1 and COR2 of STEREO-B in a view from STEREO-B. A view from elsewhere shows no image, since an image covers the model at its true place only when seen from its own spacecraft. Each image is the frame nearest to `wl_time` divided by the first frame of the window minus one (`wl_mode` = `"ratio"`), or the difference of the two (`"difference"`), after both were normalised by their exposure times, and the ratio removes vignetting and other multiplicative instrumental effects. The result is rotated to solar north up and drawn on the plane through Sun centre perpendicular to the line of sight of the spacecraft. Bright regions mark where the brightness increased since the base frame, in particular the CME and the material that it displaces, and dark regions mark where it decreased. The occulter and the region outside the field of view are transparent: C2 covers 2.2 to 6 R⊙, COR1 1.5 to 4 R⊙, and COR2 4 to 15 R⊙. When one of these layers is on, the panel of its spacecraft is widened (Section 4), and the lines and the surface keep their size in R⊙, so that they appear smaller. Since the default panel reaches 6 R⊙, only the inner part of the COR2 field appears; `--half 15` shows all of it.
 
 The terminal shows which frames were used, for example
 
@@ -151,20 +151,20 @@ A `wl_time` outside `wl_window`, or one whose nearest frame is the base frame it
 
 ### 5.7 `radio`: radio sources (off)
 
-Spheres at the positions of radio sources, coloured by frequency (light blue at 150 MHz to magenta at 450 MHz and above). corona3d does not derive the sources from radio images; their positions are given by the user as a list in which every source has its frequency in MHz (`freq`) and its sky-plane position seen from Earth, `x` towards the west limb and `y` towards solar north, in R⊙ or, with `"unit": "arcsec"`, in arcsec. A source may be one position or a series of positions (lists of equal length for `x` and `y`), for example the positions of a centroid at successive times. The list is best written under `radio_sources` in `config.json`, for example
+This layer draws spheres at the positions of radio sources, coloured by frequency from light blue at 150 MHz to magenta at 450 MHz and above. corona3d does not derive the sources from radio images, and their positions are therefore given by the user as a list in which every source has its frequency in MHz (`freq`) and its sky-plane position seen from Earth, `x` towards the west limb and `y` towards solar north, in R⊙ or, with `"unit": "arcsec"`, in arcsec. A source may be one position or a series of positions (lists of equal length for `x` and `y`), for example the positions of a centroid at successive times. The list is best written under `radio_sources` in `config.json`, for example
 
 ```json
 {"radio_sources": [{"freq": 173, "x": [-1.19, -1.14, -1.09], "y": [-0.15, -0.12, -0.08]},
                    {"freq": 228, "x": -1100, "y": -190, "unit": "arcsec"}]}
 ```
 
-after which `corona3d render --radio` draws them. In macOS and Linux, the same list can also be given on the command line enclosed in single quotes (`--radio-sources '[{"freq": 173, ...}]'`); the shells of Windows treat quotes inside an argument differently, so that on Windows the configuration file is the reliable route. The numbers above only illustrate the format; they are not measured positions.
+after which `corona3d render --radio` draws them. In macOS and Linux, the same list can also be given on the command line enclosed in single quotes (`--radio-sources '[{"freq": 173, ...}]'`). However, the shells of Windows treat quotes inside an argument differently, so that on Windows the configuration file is the reliable route. The numbers above only illustrate the format and are not measured positions.
 
-Each source is placed at the height where the four-fold Newkirk density model gives the plasma frequency of its frequency at the second harmonic (1.576 R⊙ at 173 MHz and 1.449 R⊙ at 228 MHz), on the side of the plane of the sky that faces Earth (METHODS.md, Section 8). Arcseconds are converted with the angular radius of the Sun seen from Earth at `time` (964.8 arcsec on 2013 October 25). A position farther from Sun centre than its height cannot lie at that height; it is kept in the plane of the sky, and a warning is printed. For the event of 2013 October 25, the positions are measured from the images of the Nançay Radioheliograph, which the BASS2000 archive of the Paris Observatory delivers on request as visibilities, to be imaged with the NRH software of SolarSoft.
+Each source is placed at the height where the four-fold Newkirk density model gives the plasma frequency of its frequency at the second harmonic (1.576 R⊙ at 173 MHz and 1.449 R⊙ at 228 MHz), on the side of the plane of the sky that faces Earth (METHODS.md, Section 8). Arcseconds are converted with the angular radius of the Sun seen from Earth at `time` (964.8 arcsec on 2013 October 25). A position farther from Sun centre than its height cannot lie at that height, and it is therefore kept in the plane of the sky with a printed warning. For the event of 2013 October 25, the positions are measured from the images of the Nançay Radioheliograph, which the BASS2000 archive of the Paris Observatory delivers on request as visibilities, to be imaged with the NRH software of SolarSoft.
 
 ## 6. The viewpoints
 
-Each panel looks at the reconstruction from a direction given by one entry of `views` in `config.json`. The default entries are Earth, the solar north pole, and STEREO-B:
+Each panel looks at the reconstruction from a direction given by one entry of `views` in `config.json`, and the default entries are Earth, the solar north pole, and STEREO-B:
 
 ```json
 {"views": [{"from": "earth",    "frame": [1.513, 0.087, 0.158]},
@@ -172,9 +172,9 @@ Each panel looks at the reconstruction from a direction given by one entry of `v
            {"from": "stereo_b", "frame": [1.455, -0.181, 0.093]}]}
 ```
 
-An entry names an observer with `"from"` (`"earth"`, `"stereo_b"`, or `"north"`), or gives the direction from which the Sun is seen as a Carrington longitude and latitude, `{"lon": 300, "lat": 20}`, in degrees. A view from a longitude and latitude has solar north up, and `"roll"` turns the panel counter-clockwise by that angle. The north-pole view looks down the rotation axis with the direction of the Earth at the bottom. `"frame"` gives the half-height of the panel and the offset of Sun centre to the right and upwards, in R⊙ (default `[1.6, 0, 0]`), and `"title"` replaces the panel title. To look at the CME from behind, for example, panel b can look from Carrington longitude 124°, opposite to the direction of the CME (Carrington longitude 304°, Stonyhurst longitude −53°).
+An entry names an observer with `"from"` (`"earth"`, `"stereo_b"`, or `"north"`), or gives the direction from which the Sun is seen as a Carrington longitude and latitude, `{"lon": 300, "lat": 20}`, in degrees. A view from a longitude and latitude has solar north up, and `"roll"` turns the panel counter-clockwise by that angle. The north-pole view looks down the rotation axis with the direction of the Earth at the bottom. Moreover, `"frame"` gives the half-height of the panel and the offset of Sun centre to the right and upwards, in R⊙ (default `[1.6, 0, 0]`), and `"title"` replaces the panel title. To look at the CME from behind, for example, panel b can be set to look from Carrington longitude 124°, opposite to the direction of the CME (Carrington longitude 304°, Stonyhurst longitude −53°).
 
-On the command line, `--view` sets one panel, and may be repeated:
+On the command line, `--view` sets one panel and may be repeated:
 
 ```
 corona3d render --view b=north          # panel b from above the north pole
@@ -183,11 +183,11 @@ corona3d render --view c=300,20,45      # the same, turned by 45 degrees
 corona3d render --view a=stereo_b --view c=earth
 ```
 
-The panels are labelled a, b, and c from left to right. A panel set with `--view` to a longitude and latitude uses the framing `[1.6, 0, 0]`; a panel set to the observer it already had keeps its framing.
+The panels are labelled a, b, and c from left to right. A panel set with `--view` to a longitude and latitude uses the framing `[1.6, 0, 0]`, whereas a panel set to the observer it already had keeps its framing.
 
 ## 7. The configuration file
 
-`config.json` holds every parameter of the event and of the figure. Only the keys that are present replace the defaults, and nested keys are merged one by one, so that a file containing `{"gcs": {"height": 2.0}}` alone changes only the apex height of the shell; lists, such as `views`, are replaced as a whole. The keys are:
+`config.json` holds every parameter of the event and of the figure. Only the keys that are present replace the defaults, and nested keys are merged one by one, so that a file containing `{"gcs": {"height": 2.0}}` alone changes only the apex height of the shell. Lists such as `views`, however, are replaced as a whole. The keys are listed below.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -215,13 +215,13 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | `views` | Earth, north pole, STEREO-B | viewpoint, framing, and title of each panel (Section 6) |
 | `window` | [1080, 918] | size of each panel image, pixels |
 
-A density surface at the plasma level of another frequency is obtained from the harmonic plasma relation, n_e = (f / 2 / 8980 Hz)² cm⁻³; for example, 228 MHz at the harmonic gives 1.61 × 10⁸ cm⁻³:
+A density surface at the plasma level of another frequency is obtained from the harmonic plasma relation, n_e = (f / 2 / 8980 Hz)² cm⁻³, so that, for example, 228 MHz at the harmonic gives 1.61 × 10⁸ cm⁻³:
 
 ```json
 {"ne_level": 1.61e8}
 ```
 
-The Python function `corona3d.newkirk_r(f_mhz)` gives the four-fold Newkirk height of a frequency, which helps to judge where such a surface is expected.
+The Python function `corona3d.newkirk_r(f_mhz)` gives the four-fold Newkirk height of a frequency, which indicates where such a surface is expected.
 
 ## 8. Using corona3d from Python
 
@@ -242,11 +242,11 @@ print(LAYERS)            # the names of the layers
 print(newkirk_r(173))    # 1.576 R_sun
 ```
 
-`make_figure` takes the path of the figure (relative to the working directory unless absolute), the working directory as `data_root`, the half-height `half`, a dictionary `params` whose keys replace those of the working directory's `config.json` (nested keys may be partial), and any layer as a keyword set to `True` or `False`. A misspelt layer raises an error that lists the valid names. The reconstruction itself is built by `reconstruct(params, layers, data_root)`, where `params` and `layers` may hold only the keys that differ from the defaults (`reconstruct({"density_scale": 2.5}, {"open": False}, "corona3d_work")`); to start from the working directory's configuration, pass `corona3d.paths.config("corona3d_work")` as `params`. It returns a dictionary with the density surface (a PyVista mesh with the Alfvén speed as `va`), the field lines (lists of N × 3 arrays in R⊙, Carrington-Cartesian coordinates, within `line_r_max`), the GCS shell (an array of rings), the coronagraph planes (PyVista grids with the image as `wl`), and the times used, for analyses beyond the figure. `corona3d.geometry.FieldTracer` traces lines through the whole model and returns each with its kind (`open`, `closed`, or `undetermined`).
+`make_figure` takes the path of the figure (relative to the working directory unless absolute), the working directory as `data_root`, the half-height `half`, a dictionary `params` whose keys replace those of the working directory's `config.json` (nested keys may be partial), and any layer as a keyword set to `True` or `False`, and a misspelt layer raises an error that lists the valid names. The reconstruction itself is built by `reconstruct(params, layers, data_root)`, where `params` and `layers` may hold only the keys that differ from the defaults (`reconstruct({"density_scale": 2.5}, {"open": False}, "corona3d_work")`). To start from the working directory's configuration, pass `corona3d.paths.config("corona3d_work")` as `params`. The function returns a dictionary with the density surface (a PyVista mesh with the Alfvén speed as `va`), the field lines (lists of N × 3 arrays in R⊙, Carrington-Cartesian coordinates, within `line_r_max`), the GCS shell (an array of rings), the coronagraph planes (PyVista grids with the image as `wl`), and the times used, for analyses beyond the figure. `corona3d.geometry.FieldTracer` traces lines through the whole model and returns each with its kind (`open`, `closed`, or `undetermined`).
 
 ## 9. Another event or another model run
 
-corona3d is set up for the event of 2013 October 25, but every element of the event is a key of `config.json`. For another event:
+corona3d is set up for the event of 2013 October 25, but every element of the event is a key of `config.json`, and another event is therefore prepared in the following steps.
 
 1. Choose a MAS/MAST run of the Carrington rotation of the event in the [PSI archive](https://www.predsci.com/data/runs/) and enter its path (for example `cr2143-medium/hmi_mast_mas_std_0201`) as `run`. The run must provide `rho002`, `br002`, `bt002`, `bp002`, and `va002` in its `corona/` folder.
 2. Enter the time as `time`, and keep `model_dlon` at 0.
@@ -262,14 +262,14 @@ corona3d is set up for the event of 2013 October 25, but every element of the ev
    ```
    python scripts/gcs_fit.py <working directory>/data/wl --out gcs_fit.json
    ```
-   from a copy of the repository. The script fits the six GCS parameters to the CME envelopes in C2, COR1-A, and COR1-B at the time `T_REF` set at its top, and extrapolates the apex height to the time `T_OUT` from the front in the limb view (METHODS.md, Section 7). The flare site `FLARE`, which seeds the envelopes, is also set at its top. Its results `t1500` and `t1524` go under `gcs` and `gcs_wl` (tilt minus 90°).
+   from a copy of the repository. The script fits the six GCS parameters to the CME envelopes in C2, COR1-A, and COR1-B at the time `T_REF` set at its top, and it extrapolates the apex height to the time `T_OUT` from the front in the limb view (METHODS.md, Section 7). The flare site `FLARE`, which seeds the envelopes, is also set at its top, and the results `t1500` and `t1524` go under `gcs` and `gcs_wl` (tilt minus 90°).
 5. Enter the radio sources under `radio_sources`, and run `corona3d render`.
 
-The third observer and the coronagraph layers COR1 and COR2 are those of STEREO-B, which lost contact with Earth in October 2014. For events after that date, any panel can still look from the position of STEREO-A entered as a longitude and latitude under `views`, but the COR1 and COR2 layers read only STEREO-B images.
+The third observer and the coronagraph layers COR1 and COR2 are those of STEREO-B, which lost contact with Earth in October 2014. For events after that date, any panel can still be set to look from the position of STEREO-A entered as a longitude and latitude under `views`, but the COR1 and COR2 layers read only STEREO-B images.
 
 ## 10. How the results were checked
 
-The offline tests run with `python -m pytest` in a copy of the repository and take about 40 s. They use synthetic data with known answers:
+The offline tests run with `python -m pytest` in a copy of the repository, take about 40 s, and use synthetic data with known answers, from which they verify that
 
 * the field-line tracer reproduces the analytic field lines of a dipole with its default step;
 * the MAS units and the Alfvén speed reproduce their analytic values;
@@ -284,24 +284,21 @@ The offline tests run with `python -m pytest` in a copy of the repository and ta
 * the viewpoints face the expected directions;
 * damaged and partial downloads are detected and removed.
 
-The online test (`CORONA3D_ONLINE=1 python -m pytest`) downloads the public data of 2013 October 25 into a temporary working directory and draws both figures of the README. The list of checks, with the tolerances, is in METHODS.md, Section 10, and in [MODEL_AUDIT.md](MODEL_AUDIT.md).
-
-Both figures of the README were drawn from a new working directory after `corona3d init` and `corona3d fetch`, and the C2, COR1, and COR2 frames used were those printed in Section 5.6.
+The online test (`CORONA3D_ONLINE=1 python -m pytest`) downloads the public data of 2013 October 25 into a temporary working directory and draws both figures of the README. The list of checks, together with the tolerances, is given in METHODS.md, Section 10, and in [MODEL_AUDIT.md](MODEL_AUDIT.md). Moreover, both figures of the README were drawn from a new working directory after `corona3d init` and `corona3d fetch`, with the C2, COR1, and COR2 frames printed in Section 5.6.
 
 ## 11. Differences from Morosan et al. (2022) and limits of the results
 
-* **Model run.** The MAST run used by Morosan et al. (2022) is no longer served by PSI. The public run of the same Carrington rotation was chosen because it reproduces the outline of their density surface best (intersection over union 0.87 to 0.93), but its Alfvén speeds and its streamer differ. Their colours are matched more closely with a density scale of 2.2 to 2.5 and a rotation of 7.5° east, which corona3d does not apply, and the public run does not form their regular fan of streamer loops.
-* **CME shell.** Morosan et al. (2022) do not list their GCS parameters. The default parameters were fitted again from public white-light images, and the height at 15:00 UT was extrapolated from three COR1-B frames at a constant speed of 1039 km s⁻¹ (METHODS.md, Section 7).
-* **Radio sources.** The herringbone positions of Morosan et al. (2022) are not part of corona3d, because they were measured from radio images that are not openly downloadable. The radio layer draws the positions that the user measures, at Newkirk heights and without a correction for scattering.
-* **Their conclusion.** The default figure shows which closed field lines of the public model the shell intersects. It does not test independently their conclusion that the herringbones originate on such loops, which requires the radio positions.
-* **Coronagraph images.** The images are level-0.5 ratios or differences without photometric calibration, suited to the comparison of positions, while brightness or mass estimates would need calibrated images. Each image is placed in the plane of the sky of its own spacecraft, which is exact only from that spacecraft.
-* **Field lines.** The lines are traced in a static model of the corona before the CME; they show the corona that the CME meets, without its deformation by the CME.
+The MAST run used by Morosan et al. (2022) is no longer served by PSI. We therefore chose the public run of the same Carrington rotation that reproduces the outline of their density surface best (intersection over union 0.87 to 0.93), although its Alfvén speeds and its streamer differ from theirs. In particular, their colours are matched more closely with a density scale of 2.2 to 2.5 and a rotation of 7.5° east, which corona3d does not apply, and the public run does not form their regular fan of streamer loops.
+
+Morosan et al. (2022) do not list their GCS parameters, and the default parameters were therefore fitted again from public white-light images, with the height at 15:00 UT extrapolated from three COR1-B frames at a constant speed of 1039 km s⁻¹ (METHODS.md, Section 7). Moreover, the herringbone positions of Morosan et al. (2022) are not part of corona3d, because they were measured from radio images that are not openly downloadable, and the radio layer instead draws the positions that the user measures, at Newkirk heights and without a correction for scattering. The default figure shows which closed field lines of the public model the shell intersects, but it does not test independently their conclusion that the herringbones originate on such loops, since that test requires the radio positions.
+
+At the same time, the coronagraph images are level-0.5 ratios or differences without photometric calibration, which are suited to the comparison of positions, while brightness or mass estimates would need calibrated images. Each image is placed in the plane of the sky of its own spacecraft, which is exact only from that spacecraft. Finally, the field lines are traced in a static model of the corona before the CME, so that they show the corona that the CME meets, without its deformation by the CME.
 
 ## 12. Data sources, terms of use, and citation
 
-The MAS/MAST runs are provided by Predictive Science Inc. at [predsci.com](https://www.predsci.com/data/runs/); work that uses them should cite Lionello et al. (2009) and Mikić et al. (2018). LASCO is a project of the ESA/NASA SOHO mission, and its data should be acknowledged as such together with Brueckner et al. (1995); SECCHI data are produced by the SECCHI consortium of the NASA STEREO mission and should be cited with Howard et al. (2008). The GCS model should be cited with Thernisien (2011) and PyThea with Kouloumvakos et al. (2022), and the reconstruction of the event with Morosan et al. (2022). The references are collected in `docs/refs.bib`.
+The MAS/MAST runs are provided by Predictive Science Inc. at [predsci.com](https://www.predsci.com/data/runs/), and work that uses them should cite Lionello et al. (2009) and Mikić et al. (2018). LASCO is a project of the ESA/NASA Solar and Heliospheric Observatory (SOHO) mission, and its data should be acknowledged as such together with Brueckner et al. (1995). Similarly, the data of the Sun Earth Connection Coronal and Heliospheric Investigation (SECCHI) are produced by the SECCHI consortium of the NASA STEREO mission and should be cited with Howard et al. (2008). The GCS model should be cited with Thernisien (2011), PyThea with Kouloumvakos et al. (2022), and the reconstruction of the event with Morosan et al. (2022), and all references are collected in `docs/refs.bib`.
 
-To cite corona3d itself, use [CITATION.cff](../CITATION.cff). A DOI will be added when the repository is made public.
+To cite corona3d itself, use [CITATION.cff](../CITATION.cff), to which a DOI will be added when the repository is made public.
 
 ## 13. Troubleshooting
 

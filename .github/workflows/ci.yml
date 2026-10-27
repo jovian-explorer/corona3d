@@ -29,11 +29,11 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install hdf4
       - name: Install
-        run: python -m pip install ".[test]"
+        run: python -m pip install ".[test,fit]"
       - name: Test installed package (offline tests)
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/t" && cp -r tests "$RUNNER_TEMP/t/"
           cd "$RUNNER_TEMP/t" && python -m pytest -q tests
-      - name: Authorship tests (need the source tree)
-        run: python -m pytest -q tests/test_authorship.py
+      - name: Tests that need the source tree (authorship, GCS fit script)
+        run: python -m pytest -q tests/test_authorship.py tests/test_gcs_fit.py

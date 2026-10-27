@@ -160,6 +160,36 @@ def views_at(fr, base, t, keys):
     return vs
 
 
+def projection_factor(lon, lat, observer_xyz):
+    """Fraction of a radial distance along (lon, lat) [deg, Stonyhurst] that the observer sees in
+    the plane of the sky: sqrt(1 - cos^2 of the angle between the direction and the observer)."""
+    L, B = np.radians(lon), np.radians(lat)
+    d = np.array([np.cos(B) * np.cos(L), np.cos(B) * np.sin(L), np.sin(B)])
+    o = np.asarray(observer_xyz, float)
+    return float(np.sqrt(1 - (d @ (o / np.linalg.norm(o))) ** 2))
+
+
+def front_profile(rows, r_out, min_area=1.0, margin=0.2):
+    """rows: [(time, r_sky, area)] in time order. Keeps the frames with an envelope of at least
+    min_area R_sun^2, up to the first frame whose front lies within margin of the outer edge r_out
+    of the field (that and later fronts are truncated)."""
+    kept = []
+    for t, r, a in rows:
+        if a < min_area:
+            continue
+        if r > r_out - margin:
+            break
+        kept.append((t, r, a))
+    return kept
+
+
+def extrapolate(times, heights, t0):
+    """Straight line through (time, height); returns speed [R_sun/min], height at t0, its error."""
+    x = np.array([(t - t0).total_seconds() / 60 for t in times])
+    (v, h0), cov = np.polyfit(x, np.asarray(heights, float), 1, cov=True)
+    return float(v), float(h0), float(np.sqrt(cov[1, 1]))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("wl")
@@ -186,15 +216,13 @@ def main():
 
     # step 2: leading edge of the CME, in the instrument whose line of sight is most nearly
     # perpendicular to the fitted CME direction (the limb view), deprojected with that direction
-    L, B = np.radians(q24[3]), np.radians(q24[4])
-    d = np.array([np.cos(B) * np.cos(L), np.cos(B) * np.sin(L), np.sin(B)])
     proj = {}
     for k in keys:
-        o = next(m for (kk, _), m in base.items() if kk == k).observer_coordinate.transform_to(frames.HeliographicStonyhurst).cartesian.xyz.value
-        proj[k] = float(np.sqrt(1 - (d @ (o / np.linalg.norm(o))) ** 2))
+        o = next(m for (kk, _), m in base.items() if kk == k).observer_coordinate
+        proj[k] = projection_factor(q24[3], q24[4], o.transform_to(frames.HeliographicStonyhurst).cartesian.xyz.value)
     k = max(proj, key=proj.get)
     print(f"limb view: {k} (projection factor {proj[k]:.2f})")
-    hts = []
+    rows = []
     for tf, files in fr[k]:
         b = base[(k, seq(files[0]))]
         if b.date.isot[:19] == tf.isoformat():             # the base frame itself
@@ -203,26 +231,22 @@ def main():
         dm = sunpy.map.Map(img.data - b.data, img.meta)
         env, _ = envelope(dm, k)
         ppr = (dm.rsun_obs / dm.scale.axis1).to_value(u.pix)
-        area = env.sum() / ppr**2
-        if area < 1.0:                                   # no CME, or noise at the seed
+        if not env.any():
+            rows.append((tf, 0.0, 0.0))
             continue
         cx, cy = (float(v) for v in dm.wcs.world_to_pixel(SkyCoord(0 * u.arcsec, 0 * u.arcsec, frame=dm.coordinate_frame)))
         yy, xx = np.nonzero(env)
-        r_sky = float(np.hypot(xx - cx, yy - cy).max() / ppr)
-        if r_sky > FOV[k][1] - 0.2:                      # the front has reached the edge of the
-            break                                        # field: later fronts are truncated
-        hts.append((tf.isoformat(), k, round(r_sky / proj[k], 3), round(float(area), 2)))
-        print("  ", hts[-1])
-    t0 = datetime.fromisoformat(T_OUT)
-    x = np.array([(datetime.fromisoformat(t) - t0).total_seconds() / 60 for t, *_ in hts])
-    y = np.array([h for _, _, h, _ in hts])
-    (v, h0), cov = np.polyfit(x, y, 1, cov=True)
+        rows.append((tf, float(np.hypot(xx - cx, yy - cy).max() / ppr), float(env.sum() / ppr**2)))
+    hts = [(t.isoformat(), k, round(r / proj[k], 3), round(a, 2)) for t, r, a in front_profile(rows, FOV[k][1])]
+    for h in hts:
+        print("  ", h)
+    v, h0, h0_err = extrapolate([datetime.fromisoformat(t) for t, *_ in hts], [h for _, _, h, _ in hts],
+                                datetime.fromisoformat(T_OUT))
     out["height_time"] = dict(instrument=k, projection=round(proj[k], 3),
                               frames=[dict(time=t, height=h, area_rsun2=a) for t, _, h, a in hts])
-    out["fit"] = dict(speed_rsun_per_min=round(float(v), 4), speed_km_s=round(float(v) * 695700 / 60, 0),
-                      height_1500=round(float(h0), 3), height_1500_err=round(float(np.sqrt(cov[1, 1])), 3),
-                      n_frames=len(hts))
-    out["t1500"] = dict(out["t1524"], height=round(float(h0), 3))
+    out["fit"] = dict(speed_rsun_per_min=round(v, 4), speed_km_s=round(v * 695700 / 60, 0),
+                      height_1500=round(h0, 3), height_1500_err=round(h0_err, 3), n_frames=len(hts))
+    out["t1500"] = dict(out["t1524"], height=round(h0, 3))
     out["t1500"].pop("iou")
     print("step 2:", out["fit"])
     Path(a.out).write_text(json.dumps(out, indent=1))

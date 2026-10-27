@@ -2,9 +2,9 @@
 
 # corona3d
 
-> **corona3d is private** (pre-release 0.1.0). It is ready for use and for testing, and its results can still change between versions. Please report problems, wrong results, and suggestions on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, use [CITATION.cff](CITATION.cff); a DOI will be added when the repository is made public.
+> **corona3d is private** (pre-release 0.1.0). It is ready for use and for testing, although its results can still change between versions, and problems, wrong results, and suggestions are welcome on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, please use [CITATION.cff](CITATION.cff), to which a DOI will be added when the repository is made public.
 
-Coronal mass ejections (CMEs) drive shocks through a corona whose density, magnetic field, and Alfvén speed vary strongly with height, latitude, and longitude, and the radio bursts that these shocks excite, such as the herringbones of type II bursts, are emitted where the shock meets plasma of a particular density and field geometry. Whether a shock becomes super-Alfvénic, and whether it accelerates electrons along closed streamer loops or along open field, therefore depends on the three-dimensional structure of the corona at the moment the CME passes, which no single image can show. Morosan et al. ([2022](https://doi.org/10.1051/0004-6361/202244432)) combined a magnetohydrodynamic (MHD) model of the corona, a graduated cylindrical shell (GCS) of the CME, and radio-source positions in one three-dimensional reconstruction seen from three viewpoints (their Fig. 7), from which they concluded that the herringbones originate where the CME flank meets the closed loops of a streamer. corona3d builds such a reconstruction from a public MHD run and public coronagraph images, with every layer switchable and every viewpoint selectable, so that the analysis can be repeated, examined layer by layer, and extended with radio sources from other observations. The radio positions are supplied by the user, and the GCS parameters of the default event were fitted with the script in `scripts/`, which is distributed with the code but is not part of the installed package.
+Coronal mass ejections (CMEs) drive shocks through a corona whose density, magnetic field, and Alfvén speed vary strongly with height, latitude, and longitude. The radio bursts that these shocks excite, such as the herringbones of type II bursts, are emitted where the shock meets plasma of a particular density and field geometry. Whether a shock becomes super-Alfvénic, and whether it accelerates electrons along closed streamer loops or along open field, therefore depends on the three-dimensional structure of the corona at the moment the CME passes, which no single image can show. Morosan et al. ([2022](https://doi.org/10.1051/0004-6361/202244432)) combined a magnetohydrodynamic (MHD) model of the corona, a graduated cylindrical shell (GCS) of the CME, and radio-source positions in one three-dimensional reconstruction seen from three viewpoints (their Fig. 7), and from it they concluded that the herringbones originate where the CME flank meets the closed loops of a streamer. With corona3d, we build such a reconstruction from a public MHD run and public coronagraph images, with every layer switchable and every viewpoint selectable, so that the analysis can be repeated, examined layer by layer, and extended with radio sources from other observations. The radio positions are supplied by the user, while the GCS parameters of the default event were fitted with the script in `scripts/`, which is distributed with the code but is not part of the installed package.
 
 ## What can I do with it?
 
@@ -35,25 +35,25 @@ Coronal mass ejections (CMEs) drive shocks through a corona whose density, magne
    corona3d render --c2 --cor1 --cor2 --out figures/corona3d_wl.png
    ```
 
-The figures go to `figures/` in the working directory, together with the image of each panel (`view_a.png`, `view_b.png`, `view_c.png`). The [user guide](docs/USER_GUIDE.md) describes every layer, option, and parameter, [METHODS.md](METHODS.md) describes how each element of the reconstruction is computed, and [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md) lists every method and number with its source and its test.
+The figures are written to `figures/` in the working directory, together with the image of each panel (`view_a.png`, `view_b.png`, `view_c.png`). Moreover, the [user guide](docs/USER_GUIDE.md) describes every layer, option, and parameter, [METHODS.md](METHODS.md) describes how each element of the reconstruction is computed, and [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md) lists every method and number with its source and its test.
 
 ### Worked example: the CME of 2013 October 25
 
-The default configuration is the event studied by Morosan et al. (2022): a CME launched from the eastern hemisphere at about 15:00 UT and observed from Earth and from STEREO-B, 142° apart, during which the Nançay Radioheliograph recorded herringbones at 173 and 228 MHz. On an ordinary computer, `corona3d render` takes about 40 s and draws the electron-density surface at 9 × 10⁷ cm⁻³ (the level that Morosan et al. used for the 173 MHz harmonic emission) coloured by the Alfvén speed between 100 and 700 km s⁻¹, the open and closed field lines traced from 4,500 footpoints (359 open and 4,141 closed in this model), the closed lines that pass through the CME shell in purple (478 of the 943 lines through the shell), the 1.2 R⊙ reference sphere, and the GCS shell at 15:00 UT in magenta, seen from Earth, from above the solar north pole, and from STEREO-B. The time of the model and of the shell is printed in each panel.
+The default configuration is the event studied by Morosan et al. (2022), in which a CME was launched from the eastern hemisphere at about 15:00 UT and observed from Earth and from STEREO-B, 142° apart, while the Nançay Radioheliograph recorded herringbones at 173 and 228 MHz. On an ordinary computer, `corona3d render` takes about 40 s and draws this event as seen from Earth, from above the solar north pole, and from STEREO-B. The electron-density surface lies at 9 × 10⁷ cm⁻³, the level that Morosan et al. used for the 173 MHz harmonic emission, and is coloured by the Alfvén speed between 100 and 700 km s⁻¹. The open and closed field lines are traced from 4,500 footpoints, of which 359 lines are open and 4,141 closed in this model. In particular, the closed lines that pass through the CME shell are drawn in purple, and they number 478 of the 943 lines through the shell. Together with these layers, the figure shows the 1.2 R⊙ reference sphere and the GCS shell at 15:00 UT in magenta, and each panel states the time of the model and of the shell.
 
 <p align="center"><img src="docs/corona3d_2013-10-25.png" width="100%" alt="The reconstruction of 2013 October 25 seen from Earth, the solar north pole, and STEREO-B"></p>
 
-With `--c2 --cor1 --cor2`, the LASCO C2 image of 15:24 UT appears in the Earth view and the COR1 and COR2 images of STEREO-B in the STEREO-B view, each divided by the first image of the download window (14:35 to 14:39 UT), and the shell is drawn at 15:24 UT, the time of the images. The bright CME lies inside the shell on the east limb in C2 and on the west limb in COR2-B.
+With `--c2 --cor1 --cor2`, the LASCO C2 image of 15:24 UT appears in the Earth view and the COR1 and COR2 images of STEREO-B appear in the STEREO-B view, each divided by the first image of the download window (14:35 to 14:39 UT). At the same time, the shell is drawn at 15:24 UT, the time of the images, and the bright CME is observed inside the shell on the east limb in C2 and on the west limb in COR2-B.
 
 <p align="center"><img src="docs/corona3d_2013-10-25_wl.png" width="100%" alt="The same reconstruction with LASCO C2 and STEREO-B COR1 and COR2 images"></p>
 
-The public model differs from the run used by Morosan et al. (2022), which PSI no longer serves, so that the surface and the field lines agree with their figure in outline but not in every detail, and the default figure does not test their conclusion independently; the user guide lists the differences.
+However, the public model differs from the run used by Morosan et al. (2022), which PSI no longer serves, so that the surface and the field lines agree with their figure in outline but not in every detail. The default figure therefore does not test their conclusion independently, and the user guide lists the differences.
 
 ---
 
 ## 📡 Data Sources & Provenance
 
-The model run and the images are public and are downloaded by `corona3d fetch` into the working directory.
+The model run and the images are public, and `corona3d fetch` downloads them into the working directory.
 
 | Data | Source | Used for |
 |---|---|---|
@@ -63,7 +63,7 @@ The model run and the images are public and are downloaded by `corona3d fetch` i
 | GCS parameters of the CME at 15:24 and 15:00 UT | fitted to LASCO C2 and COR1-A and -B with `scripts/gcs_fit.py` (METHODS.md, Section 7) | CME shell |
 | Radio-source positions | supplied by the user | radio layer |
 
-The radio images of the Nançay Radioheliograph are not downloaded: the archive of the Paris Observatory (BASS2000) delivers them on request as visibilities that must be imaged with SolarSoft, so that corona3d takes the positions of the sources from the user (user guide, Section 5.7). The references are collected in [docs/refs.bib](docs/refs.bib).
+The radio images of the Nançay Radioheliograph are not downloaded, since the archive of the Paris Observatory (BASS2000) delivers them on request as visibilities that must be imaged with SolarSoft, and corona3d therefore takes the positions of the sources from the user (user guide, Section 5.7). All references are collected in [docs/refs.bib](docs/refs.bib).
 
 ---
 
@@ -71,7 +71,7 @@ The radio images of the Nançay Radioheliograph are not downloaded: the archive 
 
 ### Install with pip (Python 3.12+)
 
-corona3d is not on PyPI; pip installs it from GitHub (access to the private repository is needed):
+Since corona3d is not on PyPI, pip installs it from GitHub, which requires access to the private repository:
 
 ```
 pip install "git+https://github.com/jovian-explorer/corona3d.git"
@@ -85,7 +85,7 @@ cd corona3d
 pip install -e ".[test,fit]"
 ```
 
-The dependencies are NumPy, SciPy, Matplotlib, PyVista (Sullivan & Kaszynski [2019](https://doi.org/10.21105/joss.01450)), pyhdf, Astropy, SunPy ([2020](https://doi.org/10.3847/1538-4357/ab4f7a)), and PyThea 1.3, which needs Python 3.12 or newer; pip installs all of them. On macOS computers for which pyhdf provides no wheel, the HDF4 library is needed first (`brew install hdf4`).
+The dependencies are NumPy, SciPy, Matplotlib, PyVista (Sullivan & Kaszynski [2019](https://doi.org/10.21105/joss.01450)), pyhdf, Astropy, SunPy ([2020](https://doi.org/10.3847/1538-4357/ab4f7a)), and PyThea 1.3, which needs Python 3.12 or newer, and pip installs all of them. On macOS computers for which pyhdf provides no wheel, the HDF4 library must be installed first (`brew install hdf4`).
 
 ### Command-line options
 
@@ -156,4 +156,4 @@ python -m pytest                          # offline checks (about 40 s)
 
 To include the online test, which downloads the public data of 2013 October 25 (about 130 MB) and draws both figures of this README in 5 to 10 minutes, set `CORONA3D_ONLINE=1` before `python -m pytest` (`set CORONA3D_ONLINE=1` in the Windows Command Prompt, `$env:CORONA3D_ONLINE="1"` in PowerShell, `export CORONA3D_ONLINE=1` in macOS and Linux).
 
-The offline checks use synthetic data with known answers. The field-line tracer must follow the analytic field lines of a dipole with its default step, and the MAS units and the Alfvén speed must reproduce their analytic values. A feature placed in synthetic coronagraph images at five roll angles must appear at its true position in three dimensions. Inputs that would draw a wrong or blank image must be refused. Halving `--half` must double the size of the Sun in the panel. The list of all checks is in [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md). The workflow `.github/workflows/ci.yml` runs the offline checks on Windows, macOS, and Linux with Python 3.12 for every push to `main` and every pull request into `main`; while the repository is private, it runs only when the account has GitHub Actions minutes left.
+The offline checks use synthetic data with known answers. In particular, the field-line tracer must follow the analytic field lines of a dipole with its default step, and the MAS units and the Alfvén speed must reproduce their analytic values. Moreover, a feature placed in synthetic coronagraph images at five roll angles must appear at its true position in three dimensions, inputs that would draw a wrong or blank image must be refused, and halving `--half` must double the size of the Sun in the panel. The full list of checks is given in [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md). The workflow `.github/workflows/ci.yml` runs the offline checks on Windows, macOS, and Linux with Python 3.12 for every push to `main` and every pull request into `main`, although, while the repository is private, it runs only when the account has GitHub Actions minutes left.
