@@ -1,4 +1,4 @@
-"""corona3d command line: init, new, fetch, gcs, render."""
+"""corona3d command line: init, new, fetch, gcs, render, export."""
 import argparse
 import json
 import shutil
@@ -56,6 +56,14 @@ def main(argv=None):
                         "longitude and latitude of the viewing direction with an optional roll, "
                         "e.g. b=300,20 or c=120,-10,45 (repeatable)")
     r.add_argument("--radio-sources", help='JSON list, e.g. [{"freq": 173, "x": -1.1, "y": -0.1}]')
+    e = sub.add_parser("export", help="write every enabled layer to data files with a JSON metadata sidecar",
+                       epilog="layers: " + ", ".join(LAYERS))
+    for k in LAYERS:
+        if k != "sphere":
+            e.add_argument(f"--{k}", action=argparse.BooleanOptionalAction, default=ON[k])
+    e.add_argument("--format", choices=("npz", "csv", "vtk"), default="npz")
+    e.add_argument("--out", default="export", help="output folder, relative to the working directory")
+    e.add_argument("--radio-sources", help='JSON list, as for render')
     a = ap.parse_args(argv)
 
     if a.cmd == "init":
@@ -101,6 +109,13 @@ def main(argv=None):
     if a.cmd == "gcs":
         from . import gcs
         gcs.run(h, cfg, a)
+        return
+    if a.cmd == "export":
+        from .exporting import export
+        params = {"radio_sources": json.loads(a.radio_sources)} if a.radio_sources else None
+        d = export(h, a.out, a.format, params=params,
+                   **{k: getattr(a, k) for k in LAYERS if k != "sphere"})
+        print("exported to", d)
         return
     params = {}
     if a.wl_time:

@@ -5,15 +5,16 @@
   "earth": [317.163, -3.229],
   "stereo": [329.603, -1.688],
   "stereo_sc": "A",
-  "gcs": {"height": 1.5, "kappa": 0.4, "alpha_deg": 30.0, "lon_stonyhurst": 30.0, "lat_deg": -18.0, "tilt_deg": -90.0},
-  "gcs_wl": {"time": "2024-05-09T18:52", "height": 6.0, "kappa": 0.4, "alpha_deg": 30.0, "lon_stonyhurst": 30.0, "lat_deg": -18.0, "tilt_deg": -90.0},
+  "gcs": {"height": 1.77, "kappa": 0.266, "alpha_deg": 40.344, "lon_stonyhurst": 28.0, "lat_deg": -14.0, "tilt_deg": -128.951},
+  "gcs_note": "gcs_wl: fit at 17:55 UT to COR1-A and COR2-A with the direction fixed at the flare S14W28 (IoU COR1-A 0.878). gcs at 17:32 UT keeps that shape; its apex height of 1.77 R_sun is assumed, not measured (COR1-A shows no rising front for this CME), and follows from a constant speed of about 985 km/s between the flare onset at 17:23 UT (apex at about 1 R_sun) and the 17:55 UT fit (3.722 R_sun).",
+  "gcs_wl": {"time": "2024-05-09T17:55", "height": 3.722, "kappa": 0.266, "alpha_deg": 40.344, "lon_stonyhurst": 28.0, "lat_deg": -14.0, "tilt_deg": -128.951},
   "radio_images": [
     {"instrument": "ovro_lwa", "folder": "data/ovro_lwa", "freqs": [34.1, 52.4, 70.8, 84.6],
      "start": "2024-05-09T17:32:40", "end": "2024-05-09T17:37:00", "step_s": 40, "level": 0.5,
      "min_tb": 1e9, "contours": false}
   ],
   "wl_window": ["2024-05-09T14:40", "2024-05-09T19:40"],
-  "wl_time": "2024-05-09T18:52",
+  "wl_time": "2024-05-09T17:55",
   "views": [{"from": "earth", "frame": [1.6, 0.0, 0.0]},
             {"from": "north", "frame": [1.6, 0.0, 0.0]},
             {"from": "stereo", "frame": [1.6, 0.0, 0.0]}]

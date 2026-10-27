@@ -110,7 +110,7 @@ def reconstruct(p=None, on=None, data_root="."):
         print(f"lines through the CME shell: {n[CLOSED]} closed, {n[OPEN]} open, "
               f"{len(lines) - n[OPEN] - n[CLOSED]} undetermined, of {len(lines)}")
     if on["radio"]:
-        sc["radio"], sc["radio_contours"] = radio_points(p), []
+        sc["radio"], sc["radio_contours"], sc["radio_blobs"] = radio_points(p), [], []
         from . import nrh, ovro_lwa
         from .whitelight import utc
         readers = {"nrh": nrh, "ovro_lwa": ovro_lwa}
@@ -142,6 +142,9 @@ def reconstruct(p=None, on=None, data_root="."):
                 xyz = deproject(xy[:, 0], xy[:, 1], h, *p["earth"])
                 colours = cmap(np.linspace(0, 1, len(blobs)))[:, :3]       # early to late
                 sc["radio"].append((f, xyz, colours))
+                sc["radio_blobs"].append(dict(instrument=rs["instrument"], freq=f, r=h, xyz=xyz,
+                                              time=[tf for tf, *_ in blobs], x=xy[:, 0], y=xy[:, 1],
+                                              tb=np.array([b[3] for b in blobs])))
                 if rs["contours"]:
                     sc["radio_contours"].append((f, [deproject(c[:, 0], c[:, 1], h, *p["earth"], warn=False)
                                                      for c in blobs[-1][4]]))

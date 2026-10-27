@@ -3,14 +3,15 @@ import numpy as np
 import pytest
 
 
-def write_mas(d, n_model=1.0, b0=1.0):
-    """rho = n_model (code units), B = dipole of strength b0 (code units) on a small grid."""
+def write_mas(d, n_model=1.0, b0=1.0, radial=False):
+    """rho = n_model (code units; times R^-2 when radial), B = dipole of strength b0 (code units)
+    on a small grid."""
     from pyhdf.SD import SD, SDC
     phi = np.linspace(0, 2 * np.pi, 33)
     th = np.linspace(0, np.pi, 61)
     r = np.linspace(1.0, 4.0, 61)
     P, T, R = np.meshgrid(phi, th, r, indexing="ij")
-    fields = dict(rho002=np.full(P.shape, n_model), br002=b0 * 2 * np.cos(T) / R**3,
+    fields = dict(rho002=n_model / R**2 if radial else np.full(P.shape, n_model), br002=b0 * 2 * np.cos(T) / R**3,
                   bt002=b0 * np.sin(T) / R**3, bp002=np.zeros(P.shape), va002=np.zeros(P.shape))
     d.mkdir(parents=True, exist_ok=True)
     for name, arr in fields.items():

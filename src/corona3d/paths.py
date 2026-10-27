@@ -37,10 +37,39 @@ def merge(base, new):
     return out
 
 
+def legacy(user):
+    """Keys of a config.json written before the STEREO-A support and the OVRO-LWA layer (version
+    0.1.0 and the commits after it) in the current names: `stereo_b` becomes `stereo` with
+    `stereo_sc` "B", the views from `stereo_a` and `stereo_b` become views from `stereo`, and
+    `radio_nrh` becomes an entry of `radio_images`. Returns a new dictionary."""
+    user = dict(user)
+    if "stereo_b" in user:
+        sb = user.pop("stereo_b")
+        if "stereo" not in user:
+            user["stereo"] = sb
+            user.setdefault("stereo_sc", "B")
+    views = []
+    for v in user.get("views", []):
+        if v.get("from") in ("stereo_a", "stereo_b"):
+            user.setdefault("stereo_sc", v["from"][-1].upper())
+            v = dict(v, **{"from": "stereo"})
+        views.append(v)
+    if "views" in user:
+        user["views"] = views
+    if "radio_nrh" in user:
+        nrh = dict(user.pop("radio_nrh"))
+        if "colormaps" in nrh:
+            user.setdefault("radio_colormaps", nrh.pop("colormaps"))
+        if "radio_images" not in user:
+            user["radio_images"] = [dict(nrh, instrument="nrh")]
+    return user
+
+
 def config(h):
-    """The default event, updated key by key with the working directory's config.json (if any)."""
+    """The default event, updated key by key with the working directory's config.json (if any);
+    keys of older versions are converted (see `legacy`)."""
     f = Path(h) / "config.json"
-    user = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    user = legacy(json.loads(f.read_text(encoding="utf-8"))) if f.exists() else {}
     return merge(default_config(), user)
 
 

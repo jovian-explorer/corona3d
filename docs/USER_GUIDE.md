@@ -225,6 +225,7 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | `stereo_sc` | `"B"` | the STEREO spacecraft at `stereo`, `"A"` or `"B"`; it selects the COR1 and COR2 images and the title of the third panel |
 | `gcs` | height 1.931, kappa 0.396, alpha_deg 23.46, lon_stonyhurst −53.262, lat_deg 3.146, tilt_deg −146.654 | GCS shell at `time`: apex height (R⊙), aspect ratio, half-angle (deg), direction (Stonyhurst, deg), and tilt (deg; PyThea's tilt minus 90°) |
 | `gcs_wl` | time `2013-10-25T15:24`, height 5.538, the same shape | GCS shell at the time of the coronagraph images |
+| `gcs_note` | none (set in the preset `2024-05-09`) | free text of the user about the values of `gcs` and `gcs_wl`, for example that a height is assumed and why; it is not used by the figure and is copied into the metadata of `corona3d export` |
 | `gcs_fit` | none | provenance of a fit written by `corona3d gcs` (Section 9.3); later fits read it, the figure does not |
 | `mesh_rings` | 5, 10, width 3, `#c23ad8` | vertices of the shell along its legs and front, line width, and colour |
 | `n_seeds`, `seed_r` | 4500, 1.03 | number and radius of the footpoints of the open and closed lines |
@@ -242,6 +243,8 @@ The panels are labelled a, b, and c from left to right. A panel set with `--view
 | `projection` | `"orthographic"` | `"orthographic"`, which draws every depth at the scale of the plane of the sky, or `"perspective"`, the camera of the published figure |
 | `camera_distance` | 6.65 | distance of the perspective camera at the default framing of each panel, R⊙ |
 | `window` | [1200, 918] | size of each panel image, pixels (the aspect of the panels of the published figure) |
+
+Configuration files written by version 0.1.0 and by the commits before this release remain valid: `stereo_b` is read as `stereo` with `stereo_sc` set to `"B"`, a view from `stereo_a` or `stereo_b` is read as a view from `stereo`, and `radio_nrh` is read as an entry of `radio_images` with the instrument `nrh` (its `colormaps` become `radio_colormaps`). The file itself is not rewritten.
 
 A density surface at the plasma level of another frequency is obtained from the harmonic plasma relation, n_e = (f / 2 / 8980 Hz)² cm⁻³, so that, for example, 228 MHz at the harmonic gives 1.61 × 10⁸ cm⁻³:
 
@@ -272,13 +275,45 @@ print(newkirk_r(173))    # 1.576 R_sun
 
 `make_figure` takes the path of the figure (relative to the working directory unless absolute), the working directory as `data_root`, the half-height `half`, a dictionary `params` whose keys replace those of the working directory's `config.json` (nested keys may be partial), and any layer as a keyword set to `True` or `False`, and a misspelt layer raises an error that lists the valid names. The reconstruction itself is built by `reconstruct(params, layers, data_root)`, where `params` and `layers` may hold only the keys that differ from the defaults (`reconstruct({"density_scale": 2.5}, {"open": False}, "corona3d_work")`). To start from the working directory's configuration, pass `corona3d.paths.config("corona3d_work")` as `params`. The function returns a dictionary with the density surface (a PyVista mesh with the Alfvén speed as `va`), the field lines (lists of N × 3 arrays in R⊙, Carrington-Cartesian coordinates, within `line_r_max`), the GCS shell (an array of rings), the coronagraph planes (PyVista grids with the image as `wl`), and the times used, for analyses beyond the figure. `corona3d.geometry.FieldTracer` traces lines through the whole model and returns each with its kind (`open`, `closed`, or `undetermined`).
 
+### 8.1 The layers as arrays
+
+For an analysis without the figure, `corona3d.build` reads the configuration of a working directory, builds the layers with the same code as `corona3d render`, and returns them as NumPy arrays in a `Reconstruction`:
+
+```python
+import corona3d
+
+rec = corona3d.build("corona3d_work", radio=True)      # the layer switches are those of render
+rec.surface["vertices"]       # (n, 3) iso-surface of ne_level
+rec.surface["faces"]          # (m, 3) vertex indices of the triangles
+rec.surface["va_kms"]         # (n,) Alfvén speed at each vertex
+rec.lines["closed"][0]        # (k, 3) one closed field line; also "open" and "streamer"
+rec.gcs["time"]["rings"]      # (n_axis, n_circle, 3) shell at the time of the reconstruction
+rec.gcs["image"]["rings"]     # the shell at the time of the coronagraph images (gcs_wl)
+rec.radio["lon_stonyhurst_deg"]   # one entry per radio source position
+rec.observers["earth"]        # Carrington longitude, latitude, and direction of Earth
+```
+
+Every position is in solar radii in Heliographic Carrington Cartesian coordinates, centred on the Sun, with X towards Carrington longitude 0 and Z towards solar north; this frame rotates with the Sun, so that the positions refer to the time of the reconstruction. The Alfvén speed is in km s⁻¹, the electron density `ne_cm3` in cm⁻³, the brightness temperature `tb_k` in K, and angles in degrees. The field lines are cut at `line_r_max`, and the lines of the class `streamer` are the closed lines that pass through the CME shell. The table `rec.radio` has one row for each position of the sources in `radio_sources` (instrument `user`, no time and no brightness temperature) and for each image of the NRH and OVRO-LWA sets, with the columns `instrument`, `freq_mhz`, `time_utc`, the sky-plane position seen from Earth (`x_rsun`, `y_rsun`, west and north, and `x_arcsec`, `y_arcsec`), `tb_k`, the distance from Sun centre at the Newkirk height of the frequency (`r_rsun`) and the height above the photosphere (`height_rsun`, which is `r_rsun` − 1), the Carrington Cartesian position (`x`, `y`, `z`), and the Carrington longitude, latitude, and Stonyhurst longitude (`lon_carrington_deg`, `lat_deg`, `lon_stonyhurst_deg`). The Stonyhurst longitude is the Carrington longitude minus that of Earth at the time of the reconstruction. The layers `c2`, `cor1`, and `cor2` give, for each instrument, the points of the image plane, the image values `wl`, and the shape of the grid in `rec.whitelight`. `build(home, params, **layers)` takes the same `params` and layer switches as `make_figure`, and `corona3d.load_config(home)` returns the configuration alone, with the defaults filled in. The public names are `build`, `Reconstruction`, `load_config`, `export`, `reconstruct`, `make_figure`, and `newkirk_r`.
+
+### 8.2 `corona3d export`: the layers as data files
+
+```
+corona3d export                                  # every layer that render draws by default, as one npz file
+corona3d export --radio --format csv             # tables, also with the radio sources
+corona3d export --format vtk --c2 --out ex_vtk   # files for ParaView, also with the C2 plane
+```
+
+The command writes the enabled layers into the folder `--out` (default `export`, relative to the working directory) in one of three formats, and every format is accompanied by `metadata.json`. With `npz`, the file `layers.npz` holds all arrays under the names `surface_vertices`, `surface_faces`, `surface_va_kms`, `surface_ne_cm3`, `lines_xyz`, `lines_id`, `lines_class`, `gcs_time_rings`, `gcs_image_rings`, `radio_<column>`, `<instrument>_points`, `<instrument>_wl`, and `observer_earth` and `observer_stereo` (longitude, latitude, and the three components of the direction). With `csv`, each layer is a table (`surface_vertices.csv`, `surface_faces.csv`, `field_lines.csv` with the columns `line_id`, `class`, `x`, `y`, `z`, `gcs_time.csv`, `gcs_image.csv`, `radio_sources.csv`, `observers.csv`, and `<instrument>_plane.csv`). With `vtk`, the files are written with PyVista: `surface.vtp` with the arrays `va_kms` and `ne_cm3`, `lines_open.vtp`, `lines_closed.vtp`, and `lines_streamer.vtp` with the point array `line_class` (0 open, 1 closed, 2 streamer), `gcs_time.vts` and `gcs_image.vts`, `radio_sources.vtp`, and `<instrument>_plane.vts`. The same function is available as `corona3d.export(home, out, fmt, **layers)`.
+
+The sidecar `metadata.json` records the corona3d version, the time of the export, the SHA-256 of the configuration used together with the configuration itself, the event, its time, and the model run, the coordinate frame and the units, the meaning of the radio columns, the positions of the observers, the times of the shells, and the sources of every input that was used: the PSI MAS/MAST files with their names and sizes and the download address, the density scale and the rotation of the model, the GCS parameters with the note `gcs_note` and the fit record `gcs_fit` if present, the radio image sets with the names of the files read, and the coronagraph frames with their times.
+
 ## 9. Another event or another model run
 
 Every element of an event is a key of `config.json` (Section 7), and another event is therefore prepared from a preset (Section 9.1), from its time and flare position (Section 9.2), or by editing the keys directly (Section 9.4). In each case the shell of the CME is then fitted to the coronagraph images (Section 9.3).
 
 ### 9.1 Event presets and STEREO-A
 
-`corona3d init --event NAME` writes the configuration of a preset. The preset `2013-10-25` is the default event of Morosan et al. (2022), and `2024-05-09` is the CME and type II burst of 2024 May 9, with the PSI run `cr2284-high`, the positions of Earth and STEREO-A, and the radio images of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA). The GCS values of the second preset are only a starting shell above the flare site and are replaced by the fit of Section 9.3.
+`corona3d init --event NAME` writes the configuration of a preset. The preset `2013-10-25` is the default event of Morosan et al. (2022), and `2024-05-09` is the CME and type II burst of 2024 May 9, with the PSI run `cr2284-high`, the positions of Earth and STEREO-A, and the radio images of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA). The GCS shell of the second preset is the fit to the coronagraph images of that event, and a new fit with Section 9.3 replaces it. The preset `2024-05-09` carries the GCS shell fitted to COR1-A and COR2-A at 17:55 UT, and, since the coronagraph images show no rising front at 17:32 UT, an apex height of 1.77 R⊙ at that time that is assumed and not measured; the key `gcs_note` states this (Section 7).
 
 The key `stereo_sc` (`"A"` or `"B"`) states which STEREO spacecraft lies at the position `stereo`. STEREO-B lost contact with Earth in October 2014, and the events after that date therefore use STEREO-A. The third panel, the layers COR1 and COR2, the download of Section 3, and the entry `"from": "stereo"` of `views` all follow `stereo_sc`, so that the same commands work for both spacecraft.
 
