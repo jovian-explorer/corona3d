@@ -38,6 +38,20 @@ def test_front_profile_and_extrapolation_recover_a_known_rise():
     assert err == pytest.approx(0.0, abs=1e-6)
 
 
+def test_front_profile_ignores_small_envelopes_before_the_eruption():
+    """Regression (2013-10-25 on real data): blobs of 1.0 to 1.3 R_sun^2 at 2.5 R_sun, 20 and 55
+    minutes before the rise, flattened the line from 1039 to 334 km/s. Only the run of frames
+    after the last small envelope counts."""
+    t0 = datetime(2013, 10, 25, 15, 0)
+    rows = [(t0 - timedelta(minutes=15), 2.55, 1.23), (t0 - timedelta(minutes=12), 1.0, 0.0),
+            (t0 - timedelta(minutes=5), 2.47, 1.02)]
+    rows += [(t0 + timedelta(minutes=m), 1.9 + 0.09 * m, a) for m, a in ((8, 2.2), (13, 3.8), (18, 8.0))]
+    kept = G.front_profile(rows, r_out=4.0)
+    assert [r for _, r, _ in kept] == pytest.approx([1.9 + 0.09 * m for m in (8, 13, 18)])
+    v, h0, _ = G.extrapolate([t for t, _, _ in kept], [r for _, r, _ in kept], t0)
+    assert v == pytest.approx(0.09) and h0 == pytest.approx(1.9)
+
+
 def fake_fit(*args, **kw):
     return json.loads(FIT_JSON.read_text())
 

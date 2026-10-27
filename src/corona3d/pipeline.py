@@ -27,6 +27,22 @@ def wl_available(wl, sc):
                 cor2=any(d.glob(f"*_d4c2{sc}.fts"))) if d.exists() else dict(c2=False, cor1=False, cor2=False)
 
 
+def wl_gaps(wl, cfg, wl_on, sc):
+    """{instrument: text} for the instruments with images that have no frame within
+    whitelight.WL_MAX_GAP_MIN of the white-light time (a coronagraph gap, e.g. LASCO C2 on 2024-05-09
+    from 14:48 to 18:52 UT); the figure is drawn with the other instruments."""
+    from . import whitelight as wlt
+    t = wlt.utc(cfg.get("wl_time") or cfg["time"])
+    out = {}
+    for k, ok in wl_on.items():
+        if not ok:
+            continue
+        fr = wlt._frames(wl, k, sc.upper())
+        if not fr or min(abs((f[0] - t).total_seconds()) for f in fr) > 60 * wlt.WL_MAX_GAP_MIN:
+            out[k] = f"no frame within {wlt.WL_MAX_GAP_MIN:g} min of wl_time {t:%Y-%m-%dT%H:%M} ({wlt.nearest_times(fr, t)})"
+    return out
+
+
 def radio_available(h, cfg):
     """[(entry index, instrument, folder has files)] of the radio_images entries."""
     return [(i, rs["instrument"], (h / rs["folder"]).exists() and any((h / rs["folder"]).iterdir()))
@@ -194,6 +210,8 @@ def run(h, a, log=print):
     # render
     from . import reconstruction
     figures, wl_on = {}, {k: avail[k] for k in ("c2", "cor1", "cor2")}
+    st["wl_gap"] = gaps = wl_gaps(paths.wl_dir(h), cfg, wl_on, sc)
+    wl_on = {k: ok and k not in gaps for k, ok in wl_on.items()}
     model_ok = all((paths.model_dir(h, cfg) / f"{v}.hdf").exists() for v in fetch.VARS)
     radio_on = any(ok for _, _, ok in radio_available(h, cfg))
     cases = {"base": {}, "wl": wl_on if any(wl_on.values()) else None, "radio": {"radio": True} if radio_on else None}
@@ -278,6 +296,7 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
         missing.append(f"Model files not downloaded: {', '.join(miss)}.")
     inst = {"c2": "LASCO C2", "cor1": f"STEREO-{sc} COR1", "cor2": f"STEREO-{sc} COR2"}
     missing += [f"No {inst[k]} images in data/wl." for k, ok in avail.items() if not ok]
+    missing += [f"{inst[k]}: {m}; left out of the white-light figure." for k, m in (st.get("wl_gap") or {}).items()]
     if a.fit != "skip" and not views:
         missing.append("No coronagraph images for the GCS fit.")
     for i, instr, ok in radio_available(h, cfg):

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The height-time step of `corona3d gcs` and `corona3d event` uses only the uninterrupted run of frames whose envelope covers at least 2 R⊙² (before: 1 R⊙², with gaps allowed). On the real data of 2013 October 25 the small envelopes of 1.0 and 1.2 R⊙² before the eruption had flattened the line to 334 km s⁻¹ and 2.71 R⊙ at 15:00 UT; the run of four frames gives 1126 km s⁻¹ and 1.80 ± 0.06 R⊙ (`gcs.front_profile`, `tests/test_gcs_fit.py`).
+- `corona3d event` draws the coronagraph figure with the instruments that have a frame within 30 min of `wl_time` and names the others as missing in `event_report.md`; before, a gap of one instrument (LASCO C2 on 2024 May 9) failed the whole figure (`pipeline.wl_gaps`).
 - `corona3d event --t-ref` and `corona3d gcs --t-ref` also set `wl_time` of `config.json` to the time of the fit, so that the coronagraph figure is drawn at that time when the images have a gap (for 2024 May 9, LASCO C2 has no frame between 14:48 and 18:52 UT, and `--t-ref 2024-05-09T17:55` gives `wl_time` 17:55). The provenance `gcs_fit` records the value as `wl_time` with `"wl_time_from": "--t-ref"` (`corona3d/gcs.py`, `corona3d/pipeline.py`).
 - `--views` of `corona3d gcs` and `corona3d event` and `--view` of `corona3d render` accept the legacy names `stereo_a` and `stereo_b`, as `paths.legacy` does for the configuration. In `--views` they stand for COR1 and COR2 of that spacecraft, and in `--view` for the view from `stereo`; a name for the spacecraft that is not `stereo_sc` of the event is refused.
 - When a coronagraph has no frame within `wl_window`, or none within 30 min of `wl_time`, the error of the rendering and `event_report.md` name the nearest frame times before and after `wl_time` (`corona3d/whitelight.py`).

@@ -72,6 +72,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(fetch, "whitelight", wl)
     monkeypatch.setattr(reconstruction, "make_figure", figure)
     monkeypatch.setattr(gcs, "fit", fit)
+    monkeypatch.setattr(pipeline, "wl_gaps", lambda *a: {})      # the fake frames above are not FITS files
     # NRH 150.9 MHz from 14:58:00 UT, a burst in images 18 to 27 (15:00:58 to 15:02:27 UT); 228 MHz is missing
     nrh = tmp_path / "data" / "nrh"
     nrh.mkdir(parents=True)
@@ -284,3 +285,24 @@ def test_without_t_ref_wl_time_is_left_alone(world):
     run(world)
     assert config(world.home)["wl_time"] == new_config("2013-10-25T15:00", "S06E69")["wl_time"]
     assert "wl_time_from" not in config(world.home)["gcs_fit"]
+
+
+def test_white_light_figure_is_drawn_without_an_instrument_that_has_a_gap(world, monkeypatch):
+    """Regression (2024-05-09): LASCO C2 has no frame between 14:48 and 18:52 UT, and the whole
+    white-light figure failed; it is now drawn with COR1 and COR2, and the report names the gap."""
+    monkeypatch.setattr(pipeline, "wl_gaps", lambda *a: {"c2": "no frame within 30 min of wl_time 2024-05-09T17:55"})
+    code, log = run(world)
+    assert code == 0
+    assert any(c.startswith("figure figures/wl/corona3d.png") and c.endswith("cor1,cor2") for c in world.calls)
+    assert "LASCO C2: no frame within 30 min of wl_time" in report(world)
+
+
+def test_wl_gaps_names_only_instruments_without_a_frame_near_wl_time(monkeypatch):
+    from corona3d import whitelight
+    t = datetime(2024, 5, 9, 17, 55)
+    frames = {"c2": [(datetime(2024, 5, 9, 14, 48), []), (datetime(2024, 5, 9, 18, 52), [])],
+              "cor2": [(datetime(2024, 5, 9, 17, 54), [])]}
+    monkeypatch.setattr(whitelight, "_frames", lambda wl, k, sc="B": frames[k])
+    out = pipeline.wl_gaps("x", {"wl_time": "2024-05-09T17:55", "time": "2024-05-09T17:32"},
+                           {"c2": True, "cor2": True, "cor1": False}, "A")
+    assert list(out) == ["c2"] and "18:52:00 (after)" in out["c2"]

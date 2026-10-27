@@ -7,7 +7,7 @@
    as Morosan et al. (2022) scaled their 15:24 UT shell back in time. The front is measured in the
    instrument whose line of sight is most nearly perpendicular to the CME direction (the limb
    view), as the largest distance of the envelope from Sun centre, deprojected with the fitted
-   direction, in every frame where the envelope covers at least 1 R_sun^2 and lies 0.2 R_sun or
+   direction, in every frame where the envelope covers at least 2 R_sun^2 and lies 0.2 R_sun or
    more inside the outer edge of the field of view, up to the first frame in which the front
    reaches that edge; a straight line through these heights gives the height at --t-out.
 
@@ -226,13 +226,16 @@ def projection_factor(lon, lat, observer_xyz):
     return float(np.sqrt(1 - (d @ (o / np.linalg.norm(o))) ** 2))
 
 
-def front_profile(rows, r_out, min_area=1.0, margin=0.2):
-    """rows: [(time, r_sky, area)] in time order. Keeps the frames with an envelope of at least
-    min_area R_sun^2, up to the first frame whose front lies within margin of the outer edge r_out
-    of the field (that and later fronts are truncated)."""
+def front_profile(rows, r_out, min_area=2.0, margin=0.2):
+    """rows: [(time, r_sky, area)] in time order. Keeps the uninterrupted run of frames with an
+    envelope of at least min_area R_sun^2 that ends at the first frame whose front lies within
+    margin of the outer edge r_out of the field (that and later fronts are truncated). A frame
+    below min_area ends the run before it, so that small envelopes of earlier, unrelated
+    structure (a streamer blob before the eruption) do not flatten the height-time line."""
     kept = []
     for t, r, a in rows:
         if a < min_area:
+            kept = []
             continue
         if r > r_out - margin:
             break
