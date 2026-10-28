@@ -41,6 +41,7 @@ IMPROVE_MIN = -0.01                                    # a refit without a view 
 TIE_IOU = 0.02                                         # two fits whose mean IoU differs by less than this are tied (the free fit wins)
 DEV_AREA = 3.0                                         # R_sun^2: an envelope this large counts as a developed CME (t_ref choice)
 DEV_MARGIN = 0.2                                       # R_sun: ... when its front is this far inside the outer edge of the field
+FRONT_FRAC = 0.9                                       # t_ref: the front lies at most this fraction of the outer field radius from the Sun
 SCAN_MIN = 150.0                                       # the automatic t_ref is searched up to this many minutes after t_out
 MIN_SEP = 30.0                                         # deg: views whose observers are closer than this cannot fix the direction
 CONE = 15.0                                            # deg: default half-width of the direction cone around the flare site
@@ -50,27 +51,33 @@ ALPHA_MIN = 5.0                                        # deg: a half-angle below
 BASE_MIN = 10.0                                        # base frame: the last frame at or before onset minus this many minutes
 
 
-def pick_t_ref(meas, r_out, t_out, area=DEV_AREA, margin=DEV_MARGIN, scan_min=SCAN_MIN, tol_min=6.0):
+def pick_t_ref(meas, r_out, t_out, area=DEV_AREA, margin=DEV_MARGIN, scan_min=SCAN_MIN, tol_min=6.0, frac=FRONT_FRAC):
     """Reference time of the six-parameter fit chosen from the data: the earliest frame time, at or after
-    t_out and within scan_min minutes of it, at which the CME is well developed in the largest number
-    of views. A view counts as developed when the frame of that view within tol_min minutes has an
-    envelope of at least `area` R_sun^2 whose front lies at least `margin` inside the outer edge of
-    the field. meas is {view: [(time, envelope area, front distance in R_sun)]}, r_out {view: outer edge}.
-    Returns (time, {view: True/False}) or (None, {}) when no view is ever developed."""
+    t_out and within scan_min minutes of it, at which the CME is well developed and still inside the
+    field in the largest number of views. A view counts when the frame of that view within tol_min minutes
+    has an envelope of at least `area` R_sun^2 whose front lies at most `frac` of the outer field radius
+    from the Sun (the front must also be at least `margin` inside the edge). When no time satisfies this,
+    the earlier rule is used (area and margin only). meas is {view: [(time, envelope area, front
+    distance in R_sun)]}, r_out {view: outer edge}.
+    Returns (time, {view: True/False}, rule) with rule "front_inside_fov" or "developed_only", or
+    (None, {}, None) when no view is ever developed."""
     t_out = datetime.fromisoformat(t_out) if isinstance(t_out, str) else t_out
     cand = sorted({t for rows in meas.values() for t, _, _ in rows
                    if timedelta(0) <= t - t_out <= timedelta(minutes=scan_min)})
-    best, best_n = (None, {}), 0
-    for t in cand:
-        dev = {}
-        for k, rows in meas.items():
-            near = [r for r in rows if abs((r[0] - t).total_seconds()) < tol_min * 60]
-            _, a, f = min(near, key=lambda r: abs((r[0] - t).total_seconds())) if near else (None, 0.0, 1e9)
-            dev[k] = a >= area and f <= r_out[k] - margin
-        n = sum(dev.values())
-        if n > best_n:
-            best, best_n = (t, dev), n
-    return best
+    for rule, f in (("front_inside_fov", frac), ("developed_only", None)):
+        best, best_n = (None, {}, None), 0
+        for t in cand:
+            dev = {}
+            for k, rows in meas.items():
+                near = [r for r in rows if abs((r[0] - t).total_seconds()) < tol_min * 60]
+                _, a, d = min(near, key=lambda r: abs((r[0] - t).total_seconds())) if near else (None, 0.0, 1e9)
+                dev[k] = a >= area and d <= r_out[k] - margin and (f is None or d <= f * r_out[k])
+            n = sum(dev.values())
+            if n > best_n:
+                best, best_n = (t, dev, rule), n
+        if best[0] is not None:
+            return best
+    return None, {}, None
 
 
 def poor_view(iou, iou_min=IOU_MIN, ratio=POOR_RATIO):
@@ -507,15 +514,24 @@ def auto_t_ref(fr, base, keys, flare, t_out, running=None):
             cx, cy = (float(v) for v in dm.wcs.world_to_pixel(SkyCoord(0 * u.arcsec, 0 * u.arcsec, frame=dm.coordinate_frame)))
             yy, xx = np.nonzero(env)
             meas[k].append((tf, float(env.sum() / ppr**2), float(np.hypot(xx - cx, yy - cy).max() / ppr)))
-    t, dev = pick_t_ref({k: v for k, v in meas.items() if v}, {k: FOV[k][1] for k in meas}, t0)
+    t, dev, how = pick_t_ref({k: v for k, v in meas.items() if v}, {k: FOV[k][1] for k in meas}, t0)
     rule = (f"earliest frame time within {SCAN_MIN:g} min after t_out at which the envelope covers at least "
-            f"{DEV_AREA:g} R_sun^2 with its front {DEV_MARGIN:g} R_sun inside the field edge in most views")
+            f"{DEV_AREA:g} R_sun^2 with its front at most {FRONT_FRAC:g} of the outer field radius from the Sun "
+            f"(and {DEV_MARGIN:g} R_sun inside the edge) in most views")
     if t is None:
         t = t0 + timedelta(minutes=60)
         print(f"t_ref: no developed CME in {keys}; t_out + 60 min = {t:%Y-%m-%dT%H:%M:%S} used")
         return t.strftime("%Y-%m-%dT%H:%M:%S"), dict(method="fallback", rule=rule, why="no developed envelope found")
     print(f"t_ref chosen: {t:%Y-%m-%dT%H:%M:%S} (developed in {', '.join(k for k, v in dev.items() if v)})")
-    return t.strftime("%Y-%m-%dT%H:%M:%S"), dict(method="auto", rule=rule, developed=[k for k, v in dev.items() if v])
+    rec = dict(method="auto", rule=rule, developed=[k for k, v in dev.items() if v], front_fraction=FRONT_FRAC,
+               front_inside_fov=how == "front_inside_fov")
+    if how == "front_inside_fov":
+        rec["reason"] = f"front inside {FRONT_FRAC:g} of the outer field radius in {', '.join(rec['developed'])}"
+    else:
+        rec["reason"] = (f"no frame has a developed envelope with its front within {FRONT_FRAC:g} of the outer field radius; "
+                         "the earlier rule (developed, front inside the field edge) was kept")
+        print("t_ref: " + rec["reason"])
+    return t.strftime("%Y-%m-%dT%H:%M:%S"), rec
 
 
 def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=None, previous=None,

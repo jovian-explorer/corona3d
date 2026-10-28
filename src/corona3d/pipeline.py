@@ -347,6 +347,10 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
         if how.get("method") == "auto":
             measured.append(f"The fit time {g['t_ref']} was chosen from the images: {how['rule']}; it is developed in "
                             f"{', '.join(how['developed'])}. The radio and shell time is {g['t_out']}, the time given with --time.")
+            if how.get("front_inside_fov") is False:
+                assumed.append(f"No frame had a developed CME with its front within {how.get('front_fraction', 0.9):g} of the outer "
+                               f"field radius of a view, so the earlier rule was kept for the fit time {g['t_ref']}: the front may "
+                               f"already lie near or beyond the edge of the field of view, and the apex height is then poorly constrained.")
         elif how.get("method") == "fallback":
             assumed.append(f"No coronagraph frame showed a developed CME ({how['why']}), so the fit time {g['t_ref']} is "
                            f"the reconstruction time plus 60 minutes. The radio and shell time is {g['t_out']}.")

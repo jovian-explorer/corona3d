@@ -449,11 +449,30 @@ def test_pick_t_ref_takes_the_earliest_time_with_the_most_developed_views():
     r_out = {"cor1a": 4.0, "cor2a": 15.0}
     meas = {"cor1a": [(t(20), 5.0, 3.0), (t(35), 3.5, 2.8), (t(45), 6.0, 3.2), (t(55), 9.0, 3.99)],
             "cor2a": [(t(40), 4.0, 6.0), (t(52), 7.0, 6.0)]}
-    got, dev = pick_t_ref(meas, r_out, t(32))                 # the large frame at 17:20 is before t_out and is ignored
-    assert got == t(35) and dev == dict(cor1a=True, cor2a=True)    # COR2-A at 17:40 is within 6 min
-    got, dev = pick_t_ref({"cor1a": meas["cor1a"][1:]}, r_out, t(32))
+    got, dev, rule = pick_t_ref(meas, r_out, t(32))           # the large frame at 17:20 is before t_out and is ignored
+    assert got == t(35) and dev == dict(cor1a=True, cor2a=True) and rule == "front_inside_fov"   # COR2-A at 17:40 is within 6 min
+    got, dev, rule = pick_t_ref({"cor1a": meas["cor1a"][1:]}, r_out, t(32))
     assert got == t(35) and dev == dict(cor1a=True)
     small = {"cor1a": [(t(35), 1.0, 2.0), (t(55), 9.0, 3.95)]}   # too small, then too close to the edge of the field
-    assert pick_t_ref(small, r_out, t(32)) == (None, {})
+    assert pick_t_ref(small, r_out, t(32)) == (None, {}, None)
     late = {"cor2a": [(t(32) + timedelta(minutes=200), 9.0, 6.0)]}  # beyond the search window
-    assert pick_t_ref(late, r_out, t(32)) == (None, {})
+    assert pick_t_ref(late, r_out, t(32)) == (None, {}, None)
+
+
+def test_pick_t_ref_requires_the_front_inside_the_field():
+    from corona3d.gcs import pick_t_ref
+    t = lambda m: datetime(2024, 5, 9, 17, m)
+    r_out = {"cor1a": 4.0}
+    # the first developed frame has its front at 3.7 R_sun (above 0.9 of 4), a later one cannot be earlier: the
+    # earlier frame at 17:40 (front 3.5) is chosen even though a frame at 17:35 is larger but nearer the edge
+    meas = {"cor1a": [(t(35), 6.0, 3.7), (t(40), 4.0, 3.5), (t(50), 8.0, 3.9)]}
+    got, dev, rule = pick_t_ref(meas, r_out, t(32))
+    assert got == t(40) and rule == "front_inside_fov"
+    # no frame satisfies the fraction: the earlier rule is kept and says so
+    edge = {"cor1a": [(t(35), 6.0, 3.7), (t(50), 8.0, 3.9)]}
+    got, dev, rule = pick_t_ref(edge, r_out, t(32))
+    assert got == t(35) and rule == "developed_only"
+    # two views: the time at which both satisfy the rule is preferred over an earlier time with one view
+    two = {"cor1a": [(t(35), 4.0, 3.0), (t(50), 4.0, 3.0)], "cor2a": [(t(35), 4.0, 14.5), (t(50), 4.0, 8.0)]}
+    got, dev, rule = pick_t_ref(two, {"cor1a": 4.0, "cor2a": 15.0}, t(32))
+    assert got == t(50) and dev == dict(cor1a=True, cor2a=True)
