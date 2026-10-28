@@ -57,7 +57,7 @@ def _main(argv=None):
     ri.add_argument("--force", action="store_true", help="also replace an interval given by hand")
     g = sub.add_parser("gcs", help="fit the CME shell to the coronagraph images and write it into config.json")
     g.add_argument("--wl", help="folder of the images (default: data/wl of the working directory)")
-    g.add_argument("--t-ref", help="time of the six-parameter fit (default: gcs_wl time of config.json)")
+    g.add_argument("--t-ref", help="time of the six-parameter fit (default: chosen from the images; 2013-10-25T15:24:30 for the default event)")
     g.add_argument("--t-out", help="time of the reconstruction (default: time of config.json)")
     g.add_argument("--flare", nargs=2, type=float, metavar=("LON", "LAT"),
                    help="Stonyhurst longitude and latitude of the flare site [deg] that seeds the envelopes")
@@ -100,7 +100,12 @@ def _main(argv=None):
     ev.add_argument("--height-out", type=float, metavar="R_SUN", help="apex height at --time given by hand")
     ev.add_argument("--height-note", help="reason for --height-out (required with it)")
     ev.add_argument("--views", type=gcs_views, help="instruments of the fit (default: c2, cor1 and cor2 of the STEREO spacecraft)")
-    ev.add_argument("--t-ref", help="time of the six-parameter fit (default: the gcs_wl time of config.json)")
+    ev.add_argument("--t-ref", help="time of the six-parameter fit (default: chosen from the images, the earliest coronagraph "
+                    "frame after --time at which the CME is well developed; the report states it). The radio and shell "
+                    "time is always --time")
+    ev.add_argument("--strict", action="store_true",
+                    help="exit with status 1 when any step failed (default: 0 for a partial result, with the failures "
+                         "under Warnings in event_report.md; 1 only when no figure could be drawn)")
     ev.add_argument("--drop-poor-views", dest="drop_poor_views", action="store_true", default=True,
                     help="refit without a view whose IoU is far below the others and keep the refit when it is better "
                          "(default; rule in docs/METHODS.md)")

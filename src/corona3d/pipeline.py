@@ -6,6 +6,15 @@ The steps are new (config.json), fetch (model, white light, OVRO-LWA, NRH check)
 `event_report.md`. Each step skips work that is already done: the file `event_state.json` of the
 working directory records the downloads and the fit, and a figure is drawn again only when it is
 older than `config.json`. `--force` repeats everything except writing config.json.
+
+Times: the reconstruction time t_out (the shell, the radio interval search, the shell at the radio
+sources) is always `--time`, which is the begin time of the burst when `--burst` is used. The time of
+the six-parameter fit t_ref is `--t-ref` when given; otherwise it is chosen from the images as the
+earliest coronagraph frame after t_out at which the CME is well developed (gcs.pick_t_ref), and the
+report states it. The white-light figure uses wl_time, which follows t_ref.
+
+Exit code: 0 when at least one figure exists, with every failed step listed under "Warnings" in
+event_report.md; 1 only when no figure could be drawn, or with `--strict` when any step failed.
 """
 import json
 from datetime import datetime, timedelta, timezone
@@ -28,19 +37,45 @@ def wl_available(wl, sc):
 
 
 def wl_gaps(wl, cfg, wl_on, sc):
-    """{instrument: text} for the instruments with images that have no frame within
-    whitelight.WL_MAX_GAP_MIN of the white-light time (a coronagraph gap, e.g. LASCO C2 on 2024-05-09
-    from 14:48 to 18:52 UT); the figure is drawn with the other instruments."""
+    """{instrument: text} for the instruments that cannot give a white-light panel at wl_time: no frame
+    within whitelight.WL_MAX_GAP_MIN of it (a coronagraph gap, e.g. LASCO C2 on 2024-05-09 from 14:48 to
+    18:52 UT), or the nearest frame inside wl_window is the first frame of the window, which is the
+    base frame itself and so has nothing to be compared with. The figure is drawn with the others."""
     from . import whitelight as wlt
     t = wlt.utc(cfg.get("wl_time") or cfg["time"])
+    win = [wlt.utc(x) for x in cfg["wl_window"]] if cfg.get("wl_window") else None
     out = {}
     for k, ok in wl_on.items():
         if not ok:
             continue
         fr = wlt._frames(wl, k, sc.upper())
-        if not fr or min(abs((f[0] - t).total_seconds()) for f in fr) > 60 * wlt.WL_MAX_GAP_MIN:
+        use = [f for f in fr if win[0] <= f[0] <= win[1]] if win else fr
+        near = min(use, key=lambda f: abs((f[0] - t).total_seconds())) if use else None
+        if near is None or abs((near[0] - t).total_seconds()) > 60 * wlt.WL_MAX_GAP_MIN:
             out[k] = f"no frame within {wlt.WL_MAX_GAP_MIN:g} min of wl_time {t:%Y-%m-%dT%H:%M} ({wlt.nearest_times(fr, t)})"
+        elif win and near[0] == use[0][0]:
+            out[k] = (f"the frame nearest to wl_time {t:%Y-%m-%dT%H:%M} ({near[0]:%H:%M:%S}) is the first frame of "
+                      "wl_window, the base frame, so there is no later frame to show")
     return out
+
+
+def wl_nearest(wl, cfg, wl_on, sc):
+    """(time, instrument) of the frame closest to wl_time that can be drawn (inside wl_window and not the
+    first frame of it), over the instruments with images; None when there is none."""
+    from . import whitelight as wlt
+    t = wlt.utc(cfg.get("wl_time") or cfg["time"])
+    win = [wlt.utc(x) for x in cfg["wl_window"]] if cfg.get("wl_window") else None
+    best = None
+    for k, ok in wl_on.items():
+        if not ok:
+            continue
+        fr = wlt._frames(wl, k, sc.upper())
+        use = [f for f in fr if win[0] <= f[0] <= win[1]] if win else fr
+        for f in use[1:]:
+            d = abs((f[0] - t).total_seconds())
+            if best is None or d < best[0]:
+                best = (d, f[0], k)
+    return (best[1], best[2]) if best else None
 
 
 def radio_available(h, cfg):
@@ -67,7 +102,7 @@ def fit_step(h, cfg, a, flare, views, log):
     is poor (see gcs.quality); with "fixed" only the latter. Writes gcs_fit.json and config.json for
     the accepted result. Returns the record kept in the state file."""
     wl = paths.wl_dir(h)
-    t_ref, t_out = a.t_ref or cfg["gcs_wl"]["time"], cfg["time"]
+    t_ref, t_out = a.t_ref, cfg["time"]              # t_ref None: chosen from the images by gcs.fit
     modes = [False, True] if a.fit == "auto" else [True]
     attempts, accepted = [], None
     for fixed in modes:
@@ -93,6 +128,8 @@ def fit_step(h, cfg, a, flare, views, log):
         out, fixed = accepted
         gcs.write_result(h, out, flare, views, fixed)
         rec["accepted"] = "fixed direction" if fixed else "free"
+        rec["t_ref"] = out["t_ref"]["time"]
+        rec["t_ref_choice"] = out.get("t_ref_choice") or dict(method="--t-ref")
     return rec
 
 
@@ -101,7 +138,8 @@ def _same(a, b):
 
 
 def run(h, a, log=print):
-    """The `corona3d event` command; returns the exit code (1 when a download, the fit, or a figure failed)."""
+    """The `corona3d event` command; returns the exit code: 0 for a complete or partial result (failed steps
+    are listed under Warnings in event_report.md), 1 when no figure exists or, with a.strict, when any step failed."""
     from ._extras import need
     from .events import new_config, parse_flare
     need("render", "pyvista", "the figures of `corona3d event`")      # before any download
@@ -211,6 +249,10 @@ def run(h, a, log=print):
     if a.t_ref:                                   # the white-light figure uses frames of the time of the fit
         gcs.set_wl_time(h, a.t_ref)
         step("wl_time", f"set to {a.t_ref} (--t-ref)")
+    elif (st.get("gcs") or {}).get("accepted") and cfg.get("wl_time") != (st.get("wl_moved") or {}).get("new"):
+        tr = st["gcs"]["t_ref"]
+        gcs.set_wl_time(h, tr, "t_ref chosen automatically")
+        step("wl_time", f"set to {tr} (the t_ref of the fit)")
     _save_state(h, st)
     cfg = paths.config(h)
 
@@ -218,6 +260,15 @@ def run(h, a, log=print):
     from . import reconstruction
     figures, wl_on = {}, {k: avail[k] for k in ("c2", "cor1", "cor2")}
     st["wl_gap"] = gaps = wl_gaps(paths.wl_dir(h), cfg, wl_on, sc)
+    if wl_on and any(wl_on.values()) and all(k in gaps for k, ok in wl_on.items() if ok):
+        near = wl_nearest(paths.wl_dir(h), cfg, wl_on, sc)           # no instrument has a usable frame at wl_time
+        if near:
+            old = cfg.get("wl_time") or cfg["time"]
+            gcs.set_wl_time(h, f"{near[0]:%Y-%m-%dT%H:%M:%S}", "nearest frame (no instrument had a frame at wl_time)")
+            cfg = paths.config(h)
+            st["wl_moved"] = dict(old=old, new=cfg["wl_time"], instrument=near[1])
+            step("wl_time", f"moved from {old} to {cfg['wl_time']}, the nearest {near[1]} frame")
+            st["wl_gap"] = gaps = wl_gaps(paths.wl_dir(h), cfg, wl_on, sc)
     wl_on = {k: ok and k not in gaps for k, ok in wl_on.items()}
     model_ok = all((paths.model_dir(h, cfg) / f"{v}.hdf").exists() for v in fetch.VARS)
     radio_on = any(ok for _, _, ok in radio_available(h, cfg))
@@ -246,7 +297,11 @@ def run(h, a, log=print):
 
     (h / REPORT).write_text(report(h, cfg, a, flare, views, avail, st, steps, failed), encoding="utf-8")
     step("report", f"wrote {REPORT}")
-    return 1 if failed else 0
+    st["failed"] = failed
+    _save_state(h, st)
+    if not figures:
+        return 1                                  # a total failure: nothing could be drawn
+    return 1 if failed and getattr(a, "strict", False) else 0
 
 
 def report(h, cfg, a, flare, views, avail, st, steps, failed):
@@ -268,6 +323,15 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
                         f"({mode} fit): height {w['height']:g} R_sun, aspect ratio {w['kappa']:g}, half-angle "
                         f"{w['alpha_deg']:g} deg, direction Stonyhurst longitude {w['lon_stonyhurst']:g} deg and latitude "
                         f"{w['lat_deg']:g} deg.")
+        how = g.get("t_ref_choice") or {}
+        if how.get("method") == "auto":
+            measured.append(f"The fit time {g['t_ref']} was chosen from the images: {how['rule']}; it is developed in "
+                            f"{', '.join(how['developed'])}. The radio and shell time is {g['t_out']}, the time given with --time.")
+        elif how.get("method") == "fallback":
+            assumed.append(f"No coronagraph frame showed a developed CME ({how['why']}), so the fit time {g['t_ref']} is "
+                           f"the reconstruction time plus 60 minutes. The radio and shell time is {g['t_out']}.")
+        elif a.t_ref:
+            measured.append(f"The fit time {g['t_ref']} was given with --t-ref. The radio and shell time is {g['t_out']}.")
         if g.get("height_source") == "measured":
             measured.append(f"The apex height at {g['t_out']} is {g['height_t_out']:g} +/- {g['height_t_out_err']:g} R_sun, "
                             f"extrapolated from the front in {g['front']} ({g['n_frames']} frames, {g['speed_km_s']:g} km/s).")
@@ -311,8 +375,15 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
             how = " (the NRH 2-D images must be requested from https://rsdb.obs-nancay.fr/ and copied there)" if instr == "nrh" else ""
             missing.append(f"No {instr} files in {cfg['radio_images'][i]['folder']}{how}.")
     missing += [m for m in st.get("radio", []) if "no image at or above" in m or "no frequency reaches" in m]
-    missing += [f"Failed: {x}." for x in failed]
     L += [f"- {m}" for m in missing] if missing else ["- None."]
+    L += ["", "## Warnings", ""]
+    L += [f"- Failed: {x}." for x in failed] or ["- None."]
+    if not (st.get("figures") or {}):
+        L.append("- No figure could be drawn (total failure).")
+    if st.get("wl_moved"):
+        w = st["wl_moved"]
+        L.append(f"- No coronagraph had a frame usable at wl_time {w['old']}; wl_time was moved to {w['new']}, the nearest "
+                 f"{w['instrument']} frame, so the coronagraph panel shows that frame and not the fit time.")
     L += ["", "## Fit quality", ""]
     if fit.get("attempts"):
         for t in fit["attempts"]:

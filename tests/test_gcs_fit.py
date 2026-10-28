@@ -283,3 +283,18 @@ def test_base_is_recorded_in_the_provenance():
            "fit": {"height_t_out": 1.77, "assumed": True, "note": "x"}}
     rec = G.config_update(out, (28, -14), ("cor1a",))["gcs_fit"]
     assert rec["base"]["cutoff"] == "2024-05-09T17:13:00" and rec["base"]["frames"]["cor1a/s4"].endswith("17:10:00")
+
+
+def test_auto_t_ref_skips_a_frame_with_another_binning_and_falls_back_when_nothing_develops(monkeypatch):
+    """Regression (2024-05-09, COR2-A): three frames of 256 x 256 pixels among 512 x 512 ones stopped the fit with a
+    broadcast error; such a frame is skipped. With no developed envelope the fit time is t_out plus 60 min."""
+    from types import SimpleNamespace as NS
+    t0 = datetime(2024, 5, 9, 17, 32)
+    fr = {"cor2a": [(t0 + timedelta(minutes=m), [Path(f"{n}.fts")]) for m, n in ((10, "small"), (25, "big"))]}
+    monkeypatch.setattr(G, "total_b", lambda files: NS(data=np.zeros((256, 256) if files[0].name == "small.fts" else (512, 512)),
+                                                       meta=None, date=NS(isot="2024-05-09T17:00:00")))
+    monkeypatch.setattr(G, "base_of", lambda *a, **k: NS(data=np.zeros((512, 512)), date=NS(isot="2024-05-09T17:00:00")))
+    monkeypatch.setattr(G, "envelope", lambda dm, k, flare: (np.zeros((512, 512), bool), None))
+    monkeypatch.setattr(G, "sunpy", NS(map=NS(Map=lambda d, m: NS(data=d))), raising=False)
+    t, rec = G.auto_t_ref(fr, {}, ("cor2a",), (28.0, -14.0), t0)
+    assert t == "2024-05-09T18:32:00" and rec["method"] == "fallback"

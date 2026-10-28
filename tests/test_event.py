@@ -15,6 +15,7 @@ from corona3d.events import new_config
 from corona3d.paths import config, default_config, merge, model_dir
 
 FLARE = (-69.0, -6.0)
+ORIGINAL_WL_GAPS = pipeline.wl_gaps
 NRH_FILE = "nrh2_1509_h60_20131025_145800c00_i.fts"
 
 
@@ -104,7 +105,7 @@ def test_steps_run_in_order_and_write_the_report(world):
     code, log = run(world)
     assert code == 0
     assert [x.split("]")[0][1:] for x in log] == ["new", "fetch_model", "fetch_wl", "fetch_ovro_lwa", "fetch_nrh",
-                                                  "radio_interval", "gcs", "render_base", "render_wl",
+                                                  "radio_interval", "gcs", "wl_time", "render_base", "render_wl",
                                                   "render_radio", "report"]
     assert world.calls[:3] == ["model", "wl", "fit"]
     assert world.calls[3].startswith("figure figures/corona3d.png") and world.calls[3].endswith(" ")
@@ -168,14 +169,17 @@ def test_fit_skip_fixed_and_a_height_given_by_hand(world):
     assert fixed_flags(world) == [True] and world.fits[0][-2:] == (1.77, "kinematic estimate")
 
 
-def test_when_every_fit_fails_the_shell_is_assumed_and_the_exit_code_is_one(world, monkeypatch):
+def test_when_every_fit_fails_the_shell_is_assumed_and_a_partial_result_exits_zero(world, monkeypatch):
     def fit(*a, **kw):
         raise SystemExit("fewer than two usable fronts")
     monkeypatch.setattr(gcs, "fit", fit)
     code, _ = run(world)
-    assert code == 1
+    assert code == 0                                                 # figures exist: a partial result
     text = report(world)
     assert "default one placed above the flare site" in text and "Failed: GCS fit." in text
+    assert text.index("## Warnings") < text.index("Failed: GCS fit.") < text.index("## Fit quality")
+    world.home.joinpath("event_state.json").unlink()
+    assert run(world, strict=True)[0] == 1
     assert (world.home / "figures" / "corona3d.png").exists()
 
 
@@ -281,10 +285,68 @@ def test_t_ref_also_sets_wl_time_and_is_recorded_in_the_provenance(world):
     assert config(world.home)["wl_time"] == "2013-10-25T16:10"
 
 
-def test_without_t_ref_wl_time_is_left_alone(world):
+def test_without_t_ref_the_fit_chooses_it_and_wl_time_follows(world):
+    """t_out is the time of the event (the burst); t_ref is not passed and comes from the fit, and the
+    report says so. wl_time follows the chosen t_ref; the fit time is not the default time plus 60 min."""
+    res = result()
+    res["t_ref"]["time"] = "2013-10-25T15:20:00"
+    res["t_ref_choice"] = dict(method="auto", rule="earliest developed frame", developed=["c2", "cor1b"])
+    world.fit_results.append(res)
     run(world)
-    assert config(world.home)["wl_time"] == new_config("2013-10-25T15:00", "S06E69")["wl_time"]
-    assert "wl_time_from" not in config(world.home)["gcs_fit"]
+    assert world.fits[0][1] is None and world.fits[0][2] == "2013-10-25T15:00:00"      # t_ref auto, t_out = --time
+    cfg = config(world.home)
+    assert cfg["wl_time"] == "2013-10-25T15:20:00" and cfg["gcs_fit"]["wl_time_from"] == "t_ref chosen automatically"
+    assert cfg["gcs_fit"]["t_out"] == "2013-10-25T15:00:00" and cfg["gcs_fit"]["t_ref_choice"]["method"] == "auto"
+    text = report(world)
+    assert "fit time 2013-10-25T15:20:00 was chosen from the images" in text
+    assert "radio and shell time is 2013-10-25T15:00:00" in text
+
+
+def test_fit_without_a_developed_cme_falls_back_and_the_report_says_so(world):
+    res = result()
+    res["t_ref_choice"] = dict(method="fallback", rule="r", why="no developed envelope found")
+    world.fit_results.append(res)
+    run(world)
+    assert "No coronagraph frame showed a developed CME" in report(world)
+
+
+def test_a_failed_figure_is_a_warning_and_exits_zero_unless_strict(world, monkeypatch):
+    ok = reconstruction.make_figure
+
+    def figure(out, h, half, params, **layers):
+        if "wl" in out:
+            raise RuntimeError("boom")
+        ok(out, h, half, params, **layers)
+
+    monkeypatch.setattr(reconstruction, "make_figure", figure)
+    code, log = run(world)
+    assert code == 0
+    text = report(world)
+    assert "## Warnings" in text and "Failed: figure wl (boom)." in text
+    assert "figures/corona3d.png" in text and "figures/radio/corona3d.png" in text
+    assert run(world, strict=True, force=True)[0] == 1
+
+
+def test_no_figure_at_all_is_a_total_failure_with_exit_one(world, monkeypatch):
+    def figure(*a, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(reconstruction, "make_figure", figure)
+    code, _ = run(world)
+    assert code == 1 and "No figure could be drawn" in report(world)
+
+
+def test_strict_option_is_on_the_command_line():
+    from corona3d import cli
+    seen = []
+    for extra in ([], ["--strict"]):
+        pipeline_run = pipeline.run
+        pipeline.run = lambda h, a, log=print: seen.append(a.strict) or 0
+        try:
+            with pytest.raises(SystemExit):
+                cli.main(["--home", "x", "event", "--time", "2024-05-09T17:32", "--flare", "S14W28"] + extra)
+        finally:
+            pipeline.run = pipeline_run
+    assert seen == [False, True]
 
 
 def test_white_light_figure_is_drawn_without_an_instrument_that_has_a_gap(world, monkeypatch):
@@ -306,3 +368,53 @@ def test_wl_gaps_names_only_instruments_without_a_frame_near_wl_time(monkeypatch
     out = pipeline.wl_gaps("x", {"wl_time": "2024-05-09T17:55", "time": "2024-05-09T17:32"},
                            {"c2": True, "cor2": True, "cor1": False}, "A")
     assert list(out) == ["c2"] and "18:52:00 (after)" in out["c2"]
+
+
+def test_wl_gap_when_the_nearest_frame_is_the_base_frame(monkeypatch):
+    """Regression (2024-05-09 burst 4): wl_time 18:32 is within 30 min of the first LASCO C2 frame (18:52), but
+    that frame is the first of wl_window, the base frame, so the panel failed; the instrument is now a gap."""
+    from corona3d import whitelight
+    frames = {"c2": [(datetime(2024, 5, 9, 18, 52), []), (datetime(2024, 5, 9, 19, 4), [])],
+              "cor2": [(datetime(2024, 5, 9, 17, 7), []), (datetime(2024, 5, 9, 18, 30), [])]}
+    monkeypatch.setattr(whitelight, "_frames", lambda wl, k, sc="B": frames[k])
+    cfg = {"wl_time": "2024-05-09T18:32", "time": "2024-05-09T17:32",
+           "wl_window": ["2024-05-09T16:32", "2024-05-09T20:02"]}
+    out = pipeline.wl_gaps("x", cfg, {"c2": True, "cor2": True}, "A")
+    assert list(out) == ["c2"] and "base frame" in out["c2"]
+
+
+def test_white_light_panel_moves_to_the_nearest_frame_when_no_instrument_has_one(world, monkeypatch):
+    """No instrument has a usable frame at wl_time: wl_time moves to the nearest drawable frame, the
+    coronagraph panel is still drawn, and the report says that the time was moved."""
+    from corona3d import whitelight
+    monkeypatch.setattr(pipeline, "wl_gaps", ORIGINAL_WL_GAPS)
+    t = lambda h, m: datetime(2013, 10, 25, h, m)
+    frames = {"c2": [(t(16, 40), []), (t(16, 50), [])], "cor1": [(t(14, 10), []), (t(14, 20), [])],
+              "cor2": [(t(14, 30), [])]}
+    monkeypatch.setattr(whitelight, "_frames", lambda wl, k, sc="B": frames[k])
+    code, log = run(world)
+    assert code == 0
+    assert config(world.home)["wl_time"] == "2013-10-25T16:50:00"
+    assert config(world.home)["gcs_fit"]["wl_time_from"].startswith("nearest frame")
+    assert any(c.startswith("figure figures/wl/corona3d.png") and c.endswith("c2") for c in world.calls)
+    text = report(world)
+    assert "wl_time was moved to 2013-10-25T16:50:00" in text and "## Warnings" in text
+    assert "LASCO C2" not in text.split("## Missing data")[1].split("## Warnings")[0]
+    run(world)                                                       # a second run keeps the moved time
+    assert config(world.home)["wl_time"] == "2013-10-25T16:50:00"
+
+
+def test_pick_t_ref_takes_the_earliest_time_with_the_most_developed_views():
+    from corona3d.gcs import pick_t_ref
+    t = lambda m: datetime(2024, 5, 9, 17, m)
+    r_out = {"cor1a": 4.0, "cor2a": 15.0}
+    meas = {"cor1a": [(t(20), 5.0, 3.0), (t(35), 3.5, 2.8), (t(45), 6.0, 3.2), (t(55), 9.0, 3.99)],
+            "cor2a": [(t(40), 4.0, 6.0), (t(52), 7.0, 6.0)]}
+    got, dev = pick_t_ref(meas, r_out, t(32))                 # the large frame at 17:20 is before t_out and is ignored
+    assert got == t(35) and dev == dict(cor1a=True, cor2a=True)    # COR2-A at 17:40 is within 6 min
+    got, dev = pick_t_ref({"cor1a": meas["cor1a"][1:]}, r_out, t(32))
+    assert got == t(35) and dev == dict(cor1a=True)
+    small = {"cor1a": [(t(35), 1.0, 2.0), (t(55), 9.0, 3.95)]}   # too small, then too close to the edge of the field
+    assert pick_t_ref(small, r_out, t(32)) == (None, {})
+    late = {"cor2a": [(t(32) + timedelta(minutes=200), 9.0, 6.0)]}  # beyond the search window
+    assert pick_t_ref(late, r_out, t(32)) == (None, {})

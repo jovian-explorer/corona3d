@@ -38,7 +38,33 @@ KEYS = ["height", "kappa", "alpha_deg", "lon_stonyhurst", "lat_deg", "tilt_pythe
 IOU_MIN = 0.5                                          # mean IoU below which a fit counts as poor (`corona3d event`)
 POOR_RATIO = 0.75                                      # a view is poor below this fraction of the mean IoU of the others
 IMPROVE_MIN = 0.05                                     # a refit without a view must raise the mean IoU of the kept views by this
+DEV_AREA = 3.0                                         # R_sun^2: an envelope this large counts as a developed CME (t_ref choice)
+DEV_MARGIN = 0.2                                       # R_sun: ... when its front is this far inside the outer edge of the field
+SCAN_MIN = 150.0                                       # the automatic t_ref is searched up to this many minutes after t_out
 BASE_MIN = 10.0                                        # base frame: the last frame at or before onset minus this many minutes
+
+
+def pick_t_ref(meas, r_out, t_out, area=DEV_AREA, margin=DEV_MARGIN, scan_min=SCAN_MIN, tol_min=6.0):
+    """Reference time of the six-parameter fit chosen from the data: the earliest frame time, at or after
+    t_out and within scan_min minutes of it, at which the CME is well developed in the largest number
+    of views. A view counts as developed when the frame of that view within tol_min minutes has an
+    envelope of at least `area` R_sun^2 whose front lies at least `margin` inside the outer edge of
+    the field. meas is {view: [(time, envelope area, front distance in R_sun)]}, r_out {view: outer edge}.
+    Returns (time, {view: True/False}) or (None, {}) when no view is ever developed."""
+    t_out = datetime.fromisoformat(t_out) if isinstance(t_out, str) else t_out
+    cand = sorted({t for rows in meas.values() for t, _, _ in rows
+                   if timedelta(0) <= t - t_out <= timedelta(minutes=scan_min)})
+    best, best_n = (None, {}), 0
+    for t in cand:
+        dev = {}
+        for k, rows in meas.items():
+            near = [r for r in rows if abs((r[0] - t).total_seconds()) < tol_min * 60]
+            _, a, f = min(near, key=lambda r: abs((r[0] - t).total_seconds())) if near else (None, 0.0, 1e9)
+            dev[k] = a >= area and f <= r_out[k] - margin
+        n = sum(dev.values())
+        if n > best_n:
+            best, best_n = (t, dev), n
+    return best
 
 
 def poor_view(iou, iou_min=IOU_MIN, ratio=POOR_RATIO):
@@ -291,6 +317,8 @@ def views_at(fr, base, t, keys, flare=FLARE, running=None):
         if b is None:
             continue
         img = total_b(f[1])
+        if img.data.shape != b.data.shape:                # a frame with another binning cannot be subtracted
+            continue
         dm = sunpy.map.Map(img.data - b.data, img.meta)
         v = View(dm, k, flare)
         if v.mask.sum() > 20:                            # an envelope was found
@@ -332,11 +360,49 @@ def extrapolate(times, heights, t0):
 
 
 
+def auto_t_ref(fr, base, keys, flare, t_out, running=None):
+    """Choose t_ref from the images (see pick_t_ref): the envelope area and front distance of every
+    frame of each view in the 150 minutes after t_out are measured, and the earliest time at which the
+    CME is developed in most views is taken. When no view is developed, t_out plus 60 minutes is used and
+    the record says so. Returns (ISO time, record for gcs_fit)."""
+    t0 = datetime.fromisoformat(t_out) if isinstance(t_out, str) else t_out
+    meas = {}
+    for k in keys:
+        meas[k] = []
+        for tf, files in fr[k]:
+            if not t0 <= tf <= t0 + timedelta(minutes=SCAN_MIN):
+                continue
+            b = base_of(fr, base, k, tf, files, running)
+            if b is None or b.date.isot[:19] >= tf.isoformat():
+                continue
+            img = total_b(files)
+            if img.data.shape != b.data.shape:            # a frame with another binning cannot be subtracted
+                continue
+            dm = sunpy.map.Map(img.data - b.data, img.meta)
+            env, _ = envelope(dm, k, flare)
+            if not env.any():
+                meas[k].append((tf, 0.0, 0.0))
+                continue
+            ppr = (dm.rsun_obs / dm.scale.axis1).to_value(u.pix)
+            cx, cy = (float(v) for v in dm.wcs.world_to_pixel(SkyCoord(0 * u.arcsec, 0 * u.arcsec, frame=dm.coordinate_frame)))
+            yy, xx = np.nonzero(env)
+            meas[k].append((tf, float(env.sum() / ppr**2), float(np.hypot(xx - cx, yy - cy).max() / ppr)))
+    t, dev = pick_t_ref({k: v for k, v in meas.items() if v}, {k: FOV[k][1] for k in meas}, t0)
+    rule = (f"earliest frame time within {SCAN_MIN:g} min after t_out at which the envelope covers at least "
+            f"{DEV_AREA:g} R_sun^2 with its front {DEV_MARGIN:g} R_sun inside the field edge in most views")
+    if t is None:
+        t = t0 + timedelta(minutes=60)
+        print(f"t_ref: no developed CME in {keys}; t_out + 60 min = {t:%Y-%m-%dT%H:%M:%S} used")
+        return t.strftime("%Y-%m-%dT%H:%M:%S"), dict(method="fallback", rule=rule, why="no developed envelope found")
+    print(f"t_ref chosen: {t:%Y-%m-%dT%H:%M:%S} (developed in {', '.join(k for k, v in dev.items() if v)})")
+    return t.strftime("%Y-%m-%dT%H:%M:%S"), dict(method="auto", rule=rule, developed=[k for k, v in dev.items() if v])
+
+
 def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=None, previous=None,
         running=None, height_out=None, height_note=None, drop_poor_views=True, iou_min=IOU_MIN,
         onset=None, base_minutes=BASE_MIN):
     """Two-step fit of a CME from the images in the folder wl; returns the result dictionary
-    (keys t_ref, t_out, height_time, fit). `previous` is an earlier result whose step 1 is reused,
+    (keys t_ref, t_out, height_time, fit). `t_ref` None: chosen from the images (auto_t_ref). `previous` is an earlier result whose step 1 is reused,
     `running` the minutes of a running difference (default: difference from the first frame), and
     `height_out` an apex height at t_out given by hand (with `height_note`) in place of step 2.
     With `drop_poor_views` a view whose IoU is far below the others is left out and the fit repeated
@@ -356,6 +422,9 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     if late:
         print("  no frame that early for", base_rec["fallback_earliest"], "- earliest frame used; download an earlier start")
 
+    choice = None
+    if t_ref is None:                                    # the frame where the CME is well developed
+        t_ref, choice = auto_t_ref(fr, base, keys, flare, t_out, running)
     tr = datetime.fromisoformat(t_ref)
     allkeys = tuple(keys)
     if previous:
@@ -385,6 +454,8 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
                          iou={k: round(float(v.iou(shell(q24, t_ref))), 3) for k, (_, v) in V.items()})}
     if rec:
         out["view_check"] = rec
+    if choice:
+        out["t_ref_choice"] = choice
     print("step 1:", out["t_ref"])
     if height_out is not None:                           # step 2 replaced by an assumed height
         out["fit"] = dict(height_t_out=float(height_out), assumed=True, note=height_note or "")
@@ -406,6 +477,8 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
         if b is None or b.date.isot[:19] >= tf.isoformat():  # the base frame itself, or a frame before it
             continue
         img = total_b(files)
+        if img.data.shape != b.data.shape:                    # a frame with another binning cannot be subtracted
+            continue
         dm = sunpy.map.Map(img.data - b.data, img.meta)
         env, _ = envelope(dm, k, flare)
         ppr = (dm.rsun_obs / dm.scale.axis1).to_value(u.pix)
@@ -440,12 +513,14 @@ def config_update(out, flare, keys, fix_direction=False, running=None):
         s["tilt_deg"] = round(d["tilt_pythea_deg"] - 90.0, 3)
         return dict(time=d["time"], **s) if with_time else s
     dropped = (out.get("view_check") or {}).get("dropped", [])
-    rec = {"t_ref": out["t_ref"]["time"], "t_out": out["t_out"]["time"], "views": [k for k in keys if k not in dropped],
+    rec = {"t_ref": out["t_ref"]["time"], "t_out": out["t_out"]["time"], "views": [k for k in keys if k not in dropped and k in (out["t_ref"].get("iou") or {k: 1})],
            "iou": out["t_ref"]["iou"], "flare": list(flare), "running_diff_min": running,
            "fixed": ["lon_stonyhurst", "lat_deg"] if fix_direction else [],
            "height_t_out": out["fit"]["height_t_out"]}
     if out.get("base"):
         rec["base"] = out["base"]
+    if out.get("t_ref_choice"):
+        rec["t_ref_choice"] = out["t_ref_choice"]
     if dropped:
         rec["views_dropped"] = list(dropped)
     if out["fit"].get("assumed"):
@@ -466,7 +541,7 @@ def run(home, cfg, a):
     same = cfg["time"] == default_config()["time"]           # the event of 2013-10-25
     flare = tuple(a.flare or (cfg.get("gcs_fit") or {}).get("flare")
                   or (FLARE if same else (cfg["gcs"]["lon_stonyhurst"], cfg["gcs"]["lat_deg"])))
-    t_ref = a.t_ref or (T_REF if same else cfg["gcs_wl"]["time"])
+    t_ref = a.t_ref or (T_REF if same else None)             # None: chosen from the images
     t_out = a.t_out or (T_OUT if same else cfg["time"])
     out_file = Path(home) / "gcs_fit.json"
     previous = json.loads(out_file.read_text(encoding="utf-8")) if a.skip_step1 else None
@@ -477,6 +552,8 @@ def run(home, cfg, a):
     write_result(home, out, flare, keys, a.fix_direction, a.running_diff)
     if a.t_ref:
         set_wl_time(home, a.t_ref)
+    elif out.get("t_ref_choice"):
+        set_wl_time(home, out["t_ref"]["time"], "t_ref chosen automatically")
 
 
 def write_result(home, out, flare, keys, fix_direction=False, running=None):
@@ -490,14 +567,18 @@ def write_result(home, out, flare, keys, fix_direction=False, running=None):
     print(f"wrote {out_file} and the keys gcs, gcs_wl, and gcs_fit of {f}")
 
 
-def set_wl_time(home, t_ref):
-    """Set `wl_time` of config.json to the time given as --t-ref, so that the white-light figure uses
-    frames of the time of the fit (a coronagraph can have a gap, as LASCO C2 on 2024-05-09 from 14:48
-    to 18:52 UT), and record this in the `gcs_fit` provenance (`wl_time`, `wl_time_from`)."""
+def set_wl_time(home, t_ref, source="--t-ref"):
+    """Set `wl_time` of config.json (to --t-ref, the automatically chosen t_ref, or the nearest time with
+    coronagraph frames), so that the white-light figure uses frames of the time of the fit (a coronagraph
+    can have a gap, as LASCO C2 on 2024-05-09 from 14:48 to 18:52 UT), and record this in the `gcs_fit`
+    provenance (`wl_time`, `wl_time_from`)."""
     f = Path(home) / "config.json"
     user = json.loads(f.read_text(encoding="utf-8"))
+    old = json.dumps(user, sort_keys=True)
     user["wl_time"] = t_ref
     if "gcs_fit" in user:
-        user["gcs_fit"] = dict(user["gcs_fit"], wl_time=t_ref, wl_time_from="--t-ref")
+        user["gcs_fit"] = dict(user["gcs_fit"], wl_time=t_ref, wl_time_from=source)
+    if json.dumps(user, sort_keys=True) == old:          # unchanged: keep the file (and the figures newer than it)
+        return
     f.write_text(json.dumps(user, indent=2) + "\n", encoding="utf-8")
-    print(f"wl_time of {f} set to {t_ref} (--t-ref)")
+    print(f"wl_time of {f} set to {t_ref} ({source})")
