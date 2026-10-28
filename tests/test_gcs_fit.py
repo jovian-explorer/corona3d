@@ -320,6 +320,7 @@ def test_auto_t_ref_skips_a_frame_with_another_binning_and_falls_back_when_nothi
     monkeypatch.setattr(G, "base_of", lambda *a, **k: NS(data=np.zeros((512, 512)), date=NS(isot="2024-05-09T17:00:00")))
     monkeypatch.setattr(G, "envelope", lambda dm, k, flare: (np.zeros((512, 512), bool), None))
     monkeypatch.setattr(G, "sunpy", NS(map=NS(Map=lambda d, m: NS(data=d))), raising=False)
+    monkeypatch.setattr(G, "clean_diff", lambda img, b: NS(data=img.data - b.data))
     t, rec = G.auto_t_ref(fr, {}, ("cor2a",), (28.0, -14.0), t0)
     assert t == "2024-05-09T18:32:00" and rec["method"] == "fallback"
 

@@ -11,10 +11,12 @@
    more inside the outer edge of the field of view, up to the first frame in which the front
    reaches that edge; a straight line through these heights gives the height at --t-out.
 
-Envelope of one frame: exposure-normalised total brightness minus a pre-event frame, smoothed
-with a Gaussian of 2 px, pixels brighter than 3 robust standard deviations above the median,
-the regions connected to the radial line above the flare site at r_seed, filled to their convex
-hull, and only inside the field of view of the instrument. A shell is compared with an envelope
+Envelope of one frame: exposure-normalised total brightness minus a pre-event frame (base pixels
+that are saturated or far brighter than their annulus are masked), smoothed over the usable pixels
+with a Gaussian of 0.06 R_sun, pixels brighter than 3 robust standard deviations above the median,
+opened with a radius of 0.05 R_sun, bright regions of at least 0.1 R_sun^2, the regions connected
+to the radial line above the flare site at r_seed, filled to their convex hull, and only inside the
+field of view of the instrument. A shell is compared with an envelope
 through the intersection over union (IoU) of its projected silhouette.
 
 The pure functions (projection_factor, front_profile, extrapolate) need only NumPy; PyThea,
@@ -49,6 +51,10 @@ HEIGHT_MAX = 15.0                                      # R_sun: absolute upper b
 HEIGHT_FOV_FACTOR = 1.5                                # the apex height of a fit is at most this factor times the largest outer field-of-view radius of the fitted views
 ALPHA_MIN = 5.0                                        # deg: a half-angle below this is a degenerate (needle) shell and the fit counts as poor
 BASE_MIN = 10.0                                        # base frame: the last frame at or before onset minus this many minutes
+ENV_SMOOTH = 0.06                                      # R_sun: width of the Gaussian that smooths a difference image before the threshold
+ENV_OPEN = 0.05                                        # R_sun: opening radius that removes noise specks from the thresholded image
+ENV_MIN_AREA = 0.1                                     # R_sun^2: smaller bright regions are left out of the envelope
+SAT_FACTOR = 3.0                                       # a base pixel this many times the median of its 0.1 R_sun annulus is masked (saturation, stray light)
 
 
 def pick_t_ref(meas, r_out, t_out, area=DEV_AREA, margin=DEV_MARGIN, scan_min=SCAN_MIN, tol_min=6.0, frac=FRONT_FRAC):
@@ -279,14 +285,14 @@ def choose_fit(free, fixed, tie=TIE_IOU):
 def _load():
     """Import the packages needed by a fit (not by the pure functions below)."""
     global u, sunpy, SkyCoord, fits, gcs, binary_closing, binary_dilation, binary_fill_holes
-    global gaussian_filter, label, differential_evolution, convex_hull_image, frames
+    global gaussian_filter, label, binary_opening, differential_evolution, convex_hull_image, frames
     import astropy.units as u
     import sunpy.map
     from astropy.coordinates import SkyCoord
     from astropy.io import fits
     from ._extras import need
     gcs = need("gcs", "PyThea.geometrical_models", "the GCS fit").gcs
-    from scipy.ndimage import binary_closing, binary_dilation, binary_fill_holes, gaussian_filter, label
+    from scipy.ndimage import binary_closing, binary_dilation, binary_fill_holes, binary_opening, gaussian_filter, label
     from scipy.optimize import differential_evolution
     convex_hull_image = need("gcs", "skimage.morphology", "the GCS fit").convex_hull_image
     from sunpy.coordinates import frames
@@ -327,6 +333,24 @@ def total_b(files):
     return m.superpixel([k, k] * u.pix, func=np.mean) if k > 1 else m
 
 
+def clean_diff(img, b):
+    """Difference map img - b in which the pixels of the base frame that are far brighter than the
+    rest of their annulus (saturated or stray light near the occulter, which leave a flat band in every
+    difference) are set to NaN, so that they neither enter nor break an envelope."""
+    ppr = (b.rsun_obs / b.scale.axis1).to_value(u.pix)
+    cx, cy = (float(v) for v in b.wcs.world_to_pixel(SkyCoord(0 * u.arcsec, 0 * u.arcsec, frame=b.coordinate_frame)))
+    yy, xx = np.mgrid[:b.data.shape[0], :b.data.shape[1]]
+    ring = np.floor(np.hypot(xx - cx, yy - cy) / ppr / 0.1).astype(int)
+    bd = b.data.astype(float)
+    ok = np.isfinite(bd)
+    med = np.zeros(ring.max() + 1)
+    for i in np.unique(ring[ok]):
+        med[i] = np.median(bd[ok & (ring == i)])
+    d = img.data.astype(float) - bd
+    d[ok & (bd > SAT_FACTOR * np.abs(med[ring]))] = np.nan
+    return sunpy.map.Map(d, img.meta)
+
+
 def envelope(dm, key, flare=FLARE, k=3.0):
     r_in, r_out, r_seed = FOV[key]
     ppr = (dm.rsun_obs / dm.scale.axis1).to_value(u.pix)
@@ -334,10 +358,14 @@ def envelope(dm, key, flare=FLARE, k=3.0):
     yy, xx = np.mgrid[:dm.data.shape[0], :dm.data.shape[1]]
     rr = np.hypot(xx - cx, yy - cy) / ppr
     usable = np.isfinite(dm.data) & (rr > r_in) & (rr < r_out)
-    d = gaussian_filter(np.nan_to_num(dm.data), 2.0)
+    w = max(ENV_SMOOTH * ppr, 1.0)                     # smoothing over the usable pixels only
+    d = gaussian_filter(np.where(usable, dm.data, 0.0), w) / np.maximum(gaussian_filter(usable * 1.0, w), 1e-3)
     med = np.median(d[usable])
     mad = np.median(np.abs(d[usable] - med)) * 1.4826
-    sig = (d - med > k * mad) & usable
+    sig = binary_opening((d - med > k * mad) & usable, iterations=max(1, int(round(ENV_OPEN * ppr))))
+    lab, _ = label(sig)
+    big = np.nonzero(np.bincount(lab.ravel()) / ppr**2 >= ENV_MIN_AREA)[0]
+    sig &= np.isin(lab, big[big > 0])
     s = SkyCoord(flare[0] * u.deg, flare[1] * u.deg, r_seed * u.R_sun,
                  frame=frames.HeliographicStonyhurst, obstime=dm.date).transform_to(dm.coordinate_frame)
     fx, fy = (float(v) for v in dm.wcs.world_to_pixel(s))
@@ -446,7 +474,7 @@ def views_at(fr, base, t, keys, flare=FLARE, running=None):
         img = total_b(f[1])
         if img.data.shape != b.data.shape:                # a frame with another binning cannot be subtracted
             continue
-        dm = sunpy.map.Map(img.data - b.data, img.meta)
+        dm = clean_diff(img, b)
         v = View(dm, k, flare)
         if v.mask.sum() > 20:                            # an envelope was found
             vs[k] = (f[0], v)
@@ -505,7 +533,7 @@ def auto_t_ref(fr, base, keys, flare, t_out, running=None):
             img = total_b(files)
             if img.data.shape != b.data.shape:            # a frame with another binning cannot be subtracted
                 continue
-            dm = sunpy.map.Map(img.data - b.data, img.meta)
+            dm = clean_diff(img, b)
             env, _ = envelope(dm, k, flare)
             if not env.any():
                 meas[k].append((tf, 0.0, 0.0))
@@ -550,6 +578,12 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     _load()
     flare = tuple(flare)
     fr = {k: frames_of(wl, k) for k in keys}
+    missing = [k for k in keys if not fr[k]]
+    if missing:                                          # an instrument that was not downloaded (or not observing)
+        print("no frames of", ", ".join(missing), "in", wl, "- left out of the fit")
+        keys = tuple(k for k in keys if fr[k])
+        if not keys:
+            raise SystemExit(f"no frames of any of {missing} in {wl}; run corona3d fetch first")
     onset = onset or t_out
     cutoff = base_cutoff(onset, base_minutes)
     base, late = bases_of(fr, cutoff)                    # fixed pre-event window, not the first downloaded frame
@@ -633,7 +667,7 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
         img = total_b(files)
         if img.data.shape != b.data.shape:                    # a frame with another binning cannot be subtracted
             continue
-        dm = sunpy.map.Map(img.data - b.data, img.meta)
+        dm = clean_diff(img, b)
         env, _ = envelope(dm, k, flare)
         ppr = (dm.rsun_obs / dm.scale.axis1).to_value(u.pix)
         if not env.any():
