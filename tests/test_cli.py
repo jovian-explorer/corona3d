@@ -10,6 +10,7 @@ from corona3d.cli import main
 def test_render_outside_a_working_directory_stops_with_advice(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CORONA3D_HOME", raising=False)
+    monkeypatch.setattr("corona3d.paths.default_home", lambda: tmp_path / "nohome")
     with pytest.raises(SystemExit) as e:
         main(["render"])
     assert "corona3d init" in str(e.value)

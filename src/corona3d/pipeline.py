@@ -74,7 +74,8 @@ def fit_step(h, cfg, a, flare, views, log):
         name = "fixed direction" if fixed else "free"
         try:
             out = gcs.fit(wl, t_ref, t_out, flare, views, fixed, None, None, None, a.height_out, a.height_note,
-                          drop_poor_views=getattr(a, "drop_poor_views", True), iou_min=a.iou_min)
+                          drop_poor_views=getattr(a, "drop_poor_views", True), iou_min=a.iou_min,
+                          onset=getattr(a, "onset", None), base_minutes=getattr(a, "base_minutes", gcs.BASE_MIN))
         except (SystemExit, Exception) as e:                     # SystemExit: the fit found no envelope or front
             attempts.append(dict(mode=name, status="failed", why=[str(e) or type(e).__name__]))
             log(f"gcs: {name} fit failed ({attempts[-1]['why'][0]})")
@@ -101,7 +102,12 @@ def _same(a, b):
 
 def run(h, a, log=print):
     """The `corona3d event` command; returns the exit code (1 when a download, the fit, or a figure failed)."""
+    from ._extras import need
     from .events import new_config, parse_flare
+    need("render", "pyvista", "the figures of `corona3d event`")      # before any download
+    need("render", "PyThea.geometrical_models", "the CME shell of the figures")
+    if a.fit != "skip":
+        need("gcs", "skimage.morphology", "the GCS fit (--fit skip leaves it out)")
     h = Path(h)
     h.mkdir(parents=True, exist_ok=True)
     steps, failed = [], []

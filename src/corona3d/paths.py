@@ -1,5 +1,6 @@
-"""The working directory: --home, the environment variable CORONA3D_HOME, or the current folder
-when it holds a config.json written by `corona3d init`."""
+"""The working directory (home): --home, the environment variable CORONA3D_HOME, the current folder
+when it holds a config.json written by `corona3d init`, or else the platform cache directory
+(platformdirs), e.g. ~/.cache/corona3d on Linux and %LOCALAPPDATA%/corona3d/Cache on Windows."""
 import json
 import os
 import sys
@@ -21,8 +22,28 @@ def event(name):
     return json.loads(files("corona3d").joinpath("events", f"{name}.json").read_text(encoding="utf-8"))
 
 
+def default_home():
+    """The platform cache directory for corona3d (used when no other home is chosen)."""
+    try:
+        from platformdirs import user_cache_dir
+        return Path(user_cache_dir("corona3d", appauthor=False))
+    except ImportError:
+        return Path.home() / ".corona3d"
+
+
+def home_source(arg=None):
+    """(path, where it came from) of the working directory chosen by home()."""
+    if arg:
+        return Path(arg).resolve(), "--home"
+    if os.environ.get("CORONA3D_HOME"):
+        return Path(os.environ["CORONA3D_HOME"]).resolve(), "CORONA3D_HOME"
+    if (Path.cwd() / "config.json").exists():
+        return Path.cwd().resolve(), "current folder (config.json)"
+    return default_home().resolve(), "platform cache directory"
+
+
 def home(arg=None, must_exist=True):
-    h = Path(arg or os.environ.get("CORONA3D_HOME") or Path.cwd()).resolve()
+    h = home_source(arg)[0]
     if must_exist and not (h / "config.json").exists():
         sys.exit(f"{h} is not a corona3d working directory (no config.json); "
                  "run `corona3d init` there first, or pass --home")

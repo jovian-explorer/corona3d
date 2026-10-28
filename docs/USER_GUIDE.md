@@ -36,21 +36,40 @@ Contents
 
 ## 1. Install and start
 
-corona3d runs on Windows, macOS, and Linux and needs Python 3.12 or newer, because PyThea 1.3, which builds the shell of the coronal mass ejection (CME), requires it. Since corona3d is not on PyPI, pip installs it from the GitHub repository, which is private at present, and the account used by git must therefore have access to it:
+corona3d runs on Windows, macOS, and Linux and needs Python 3.12 or newer, because PyThea 1.3, which builds the shell of the coronal mass ejection (CME), requires it. Once corona3d is released on PyPI, one command installs it with every optional part:
 
 ```
-pip install "git+https://github.com/jovian-explorer/corona3d.git"
+pip install "corona3d[all]"
 ```
 
-To work on the code, run the tests, or run the fit of the graduated cylindrical shell (GCS) described in Section 9, install it from a copy of the repository in editable mode, together with pytest, Pillow, and scikit-image:
+Until then, pip installs it from the GitHub repository, which is private at present, so the account used by git must have access to it:
+
+```
+pip install "corona3d[all] @ git+https://github.com/jovian-explorer/corona3d.git"
+```
+
+The plain `pip install corona3d` is the light core. It installs NumPy, SciPy, Matplotlib, Astropy, SunPy, pyhdf for the HDF4 files of the magnetohydrodynamic (MHD) model, and platformdirs, and it runs the downloads, `corona3d new`, `corona3d fetch`, `corona3d radio-interval`, and `corona3d doctor`. The heavy packages are optional extras, imported only when a command needs them, and a command that needs a missing one stops with the name of the extra to install:
+
+| Extra | Adds | Needed for |
+|---|---|---|
+| `render` | PyVista (with the Visualization Toolkit, VTK) and PyThea | `corona3d render`, `corona3d event`, `corona3d export`, `corona3d.build` |
+| `gcs` | PyThea and scikit-image | the fit of the graduated cylindrical shell (GCS) of Section 9 |
+| `radio` | h5py | the OVRO-LWA images |
+| `all` | the three extras above | the complete workflow |
+| `test` | pytest and Pillow | the test suite |
+| `docs` | MkDocs | building the documentation as a web site |
+
+To work on the code or run the tests, install a copy of the repository in editable mode:
 
 ```
 git clone https://github.com/jovian-explorer/corona3d.git
 cd corona3d
-pip install -e ".[test,fit]"
+pip install -e ".[all,test]"
 ```
 
-pip installs NumPy, SciPy, and Matplotlib for the computation and the figure, PyVista and the Visualization Toolkit (VTK) for the three-dimensional rendering, pyhdf for the HDF4 files of the magnetohydrodynamic (MHD) model, Astropy and SunPy for the coronagraph images and their coordinates, and PyThea for the GCS shell of the CME. pyhdf provides wheels for Windows, Linux, and recent macOS on Apple processors. On other Macs, the HDF4 library must be installed first with `brew install hdf4`, while `conda install -c conda-forge pyhdf` is an alternative on any system. Since the renderings are drawn off screen, no window opens, and corona3d therefore also runs on a server, provided that VTK finds an OpenGL implementation (Section 13).
+pyhdf provides wheels for Windows, Linux, and recent macOS on Apple processors. On other Macs, the HDF4 library must be installed first with `brew install hdf4`, while `conda install -c conda-forge pyhdf` is an alternative on any system. Since the renderings are drawn off screen, no window opens, and corona3d therefore also runs on a server, provided that VTK finds an OpenGL implementation (Section 13).
+
+`corona3d doctor` reports the version, the installed core packages and extras, the working directory and where it came from, the package data, and whether the archives that corona3d uses (PSI, the Virtual Solar Observatory, the OVRO-LWA bucket, NOAA NCEI, and JPL Horizons) answer; `corona3d doctor --offline` skips the network check. Nothing in the installed package depends on the layout of the repository.
 
 After the installation, the command `corona3d` is available in the terminal (`python -m corona3d` does the same), and `corona3d --version` prints the version.
 
@@ -66,7 +85,7 @@ corona3d init
 
 `corona3d init` writes `config.json` with the event of 2013 October 25 studied by Morosan et al. (2022). An existing `config.json` is never overwritten, so that an edited configuration is kept when `init` is given again. The option `--event` selects another preset instead: `corona3d init --event 2024-05-09` writes the configuration of the CME and type II burst of 2024 May 9 (Section 9.1), and `corona3d init --help` lists the presets that are installed.
 
-corona3d finds the working directory from the option `--home` given before the command (`corona3d --home D:\corona3d_work render`), then from the environment variable `CORONA3D_HOME`, and otherwise takes the current folder. Since a command given in a folder without `config.json` would fill that folder with data, `fetch`, `gcs`, and `render` stop there with the advice to run `corona3d init` first.
+corona3d finds the working directory from the option `--home` given before the command (`corona3d --home D:\corona3d_work render`), then from the environment variable `CORONA3D_HOME`, then the current folder when it holds a `config.json`, and otherwise the platform cache directory (`%LOCALAPPDATA%\corona3d\Cache` on Windows, `~/.cache/corona3d` on Linux, `~/Library/Caches/corona3d` on macOS), so that nothing depends on the folder from which the command is given. `corona3d doctor` prints the directory in use and where it came from. Since one working directory holds one event, an event in the cache directory is replaced with `corona3d new --force`, and another event is better kept in its own directory with `--home`. When the chosen directory has no `config.json`, `fetch`, `gcs`, and `render` stop with the advice to run `corona3d init` first.
 
 After a download and two renderings, the directory contains
 
@@ -365,6 +384,7 @@ fits the GCS shell to the images in `data/wl/` of the working directory in the t
 | `--running-diff MINUTES` | builds the envelopes from running differences, each frame minus the frame of the same observing programme nearest to MINUTES earlier, instead of the difference from the first frame; useful when earlier ejecta or a slow rise leave no signal against the first frame |
 | `--height-out R` and `--height-note TEXT` | give the apex height at `--t-out` in R⊙ by hand, for a CME whose rise at that time cannot be measured; step 2 is skipped, and the reason in `--height-note` (required) is written into `gcs_fit` together with `"height_source": "assumed"` |
 | `--drop-poor-views` / `--keep-all-views` | with the default `--drop-poor-views`, a view whose IoU is below 0.5 and below 0.75 times the mean of the others is left out and the fit repeated; the refit is kept only when the mean IoU of the remaining views rises by at least 0.05, and at least one view always remains (rule in METHODS.md, Section 7.3); both fits are written to `gcs_fit.json` (`view_check`) and the views left out to `views_dropped` of `gcs_fit`; `--keep-all-views` fits all views as given |
+| `--onset T` and `--base-minutes N` | the base frame of the envelopes is the last frame of each observing programme at or before the flare onset `T` minus `N` minutes (defaults: `--t-out` and 10 min), so that the fit does not depend on when the download starts; the choice is recorded in `gcs_fit` (`base`) and explained in METHODS.md, Section 7.2 |
 | `--skip-step1` | takes step 1 from the `gcs_fit.json` of the working directory and repeats only step 2 |
 
 The command writes two files into the working directory. `gcs_fit.json` holds the full result, namely the six parameters at both times, the height-time frames of the front, and the speed. In `config.json`, the keys `gcs` (at `--t-out`) and `gcs_wl` (at `--t-ref`) are replaced by the fitted shells, with the tilt of the configuration equal to the PyThea tilt minus 90°, and the new key `gcs_fit` records how they were obtained: the two times, the instruments, the intersection over union (IoU) of the shell with the envelope in each instrument, the instrument of the front, its speed in km s⁻¹, the apex height at `--t-out` with its uncertainty (`"height_source": "measured"`), the number of frames, the flare site, the interval of the running difference if one was used, and the parameters that were held fixed. An assumed height has no speed or uncertainty and is marked as such. The other keys of `config.json` are left unchanged. The fit of the default event reproduces the shell of Section 5.5 (apex height 1.931 ± 0.158 R⊙ at 15:00 UT, speed 1039 km s⁻¹), and its result is kept in `scripts/gcs_fit_2013-10-25.json` under the keys `t_ref` and `t_out`. The fit takes several minutes, since the shell is projected into every instrument for each trial of the optimisation.
@@ -397,7 +417,7 @@ corona3d event --time 2024-05-09T17:32 --flare S14W28 [--home DIR] [--fit auto|f
 
 When `--time` is a date without a time, for example `corona3d event --time 2024-05-09 --flare S14W28`, the command lists the type II and type III bursts of that day and stops. The list is the daily file of the edited events of the NOAA Space Weather Prediction Center (the observatory entries of type RSP), which the NCEI archive serves without a login at `https://www.ngdc.noaa.gov/stp/space-weather/swpc-products/daily_reports/solar_event_reports/` (the FTP server of SWPC, `ftp://ftp.swpc.noaa.gov/pub/indices/events/`, holds the recent files and is the fallback). Each line gives a number, the burst type, the begin and end time in UT, the frequency range in MHz, the observatory, and, for type II, the shock speed reported. `--burst N` then runs the event with the begin time of burst N as `--time`, for example `--time 2024-05-09 --burst 4` for the type II burst of 17:32 UT. The file is kept in `data/bursts/` of the working directory. The list is made by observers at several stations and is not complete, so that `--time` with a time remains the way to choose any other moment; when the file cannot be fetched or the day has no burst, the command says so and asks for `--time`.
 
-`corona3d event` runs all the steps for one event in the working directory (`--home`, otherwise the current folder) and ends with the file `event_report.md`. The steps are the following.
+`corona3d event` runs all the steps for one event in the working directory (`--home`, otherwise as in Section 2) and ends with the file `event_report.md`. The steps are the following.
 
 1. `new` writes `config.json` from `--time` and `--flare` (Section 9.2) when it does not exist; a `config.json` of another time stops the command.
 2. `fetch` downloads the model run, the white-light images, and, from 2024 April onward, the OVRO-LWA images of the search window of `--radio-search` minutes (default 10), so that the interval can be chosen from them, and it checks the NRH files (Section 3).

@@ -1,0 +1,10 @@
+site_name: corona3d
+repo_url: https://github.com/jovian-explorer/corona3d
+theme:
+  name: material
+nav:
+  - User guide: USER_GUIDE.md
+  - Methods: METHODS.md
+  - Limitations: LIMITATIONS.md
+  - Model audit: MODEL_AUDIT.md
+docs_dir: docs

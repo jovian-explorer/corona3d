@@ -28,7 +28,8 @@ def files(folder):
 
 def read(path):
     """Header (dict), band centre frequencies [MHz], and the full-grid images (n_band, ny, nx) [K]."""
-    import h5py
+    from ._extras import need
+    h5py = need("radio", "h5py", "reading OVRO-LWA images")
     from scipy.ndimage import zoom
     with h5py.File(path, "r") as f:
         hdr = dict(f["ch_vals"].attrs)

@@ -10,13 +10,19 @@ Coronal mass ejections (CMEs) drive shocks through a corona whose density, magne
 
 ## Install
 
-corona3d needs Python 3.12 or newer, because PyThea 1.3, which builds the GCS shell, requires it, and it runs on Windows, macOS, and Linux. Since the repository is private at present, the account used by git must have access to it:
+corona3d needs Python 3.12 or newer, because PyThea 1.3, which builds the GCS shell, requires it, and it runs on Windows, macOS, and Linux. Once corona3d is released on PyPI, one command installs it with every optional part:
 
 ```
-pip install "git+https://github.com/jovian-explorer/corona3d.git"
+pip install "corona3d[all]"
 ```
 
-The fit of the shell needs scikit-image, which `pip install "corona3d[fit] @ git+https://github.com/jovian-explorer/corona3d.git"` adds. On macOS with an Intel processor, the HDF4 library must be installed first with `brew install hdf4`, and `conda install -c conda-forge pyhdf` is an alternative on any system. The user guide ([Section 1](docs/USER_GUIDE.md#1-install-and-start)) gives the details.
+Until then, pip installs it from the repository, which is private at present, so the account used by git must have access to it:
+
+```
+pip install "corona3d[all] @ git+https://github.com/jovian-explorer/corona3d.git"
+```
+
+The plain package is the light core (downloads, event set-up, radio interval, `corona3d doctor`). The extras `render` (PyVista and PyThea, for the figures), `gcs` (PyThea and scikit-image, for the shell fit), and `radio` (h5py, for OVRO-LWA) add the heavy packages, `all` adds the three, and a command that needs a missing one names the extra to install. `corona3d --version` prints the version, and `corona3d doctor` reports the extras, the working directory (by default the platform cache directory, changed with `--home` or `CORONA3D_HOME`), and which archives answer. On macOS with an Intel processor, the HDF4 library must be installed first with `brew install hdf4`, and `conda install -c conda-forge pyhdf` is an alternative on any system. The user guide ([Section 1](docs/USER_GUIDE.md#1-install-and-start)) gives the details.
 
 ## Quick start: one command for an event
 
@@ -103,7 +109,7 @@ Keshav Aggarwal, Student Visitor, Space Physics Laboratory (SPL), Vikram Sarabha
 ## Tests
 
 ```
-pip install -e ".[test]"
+pip install -e ".[all,test]"
 python -m pytest                          # offline checks (about 1 min)
 CORONA3D_ONLINE=1 python -m pytest        # also downloads the data of 2013 October 25
 ```

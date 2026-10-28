@@ -1,4 +1,4 @@
-"""corona3d command line: init, new, fetch, radio-interval, gcs, event, render, export."""
+"""corona3d command line: doctor, init, new, fetch, radio-interval, gcs, event, render, export."""
 import argparse
 import json
 import shutil
@@ -20,11 +20,22 @@ def gcs_views(text):
 
 
 def main(argv=None):
+    from ._extras import MissingExtra
+    try:
+        return _main(argv)
+    except MissingExtra as e:
+        sys.exit(f"corona3d: {e}")
+
+
+def _main(argv=None):
     ap = argparse.ArgumentParser(prog="corona3d", description="Three-dimensional reconstruction of a CME "
                                  "and the corona from public MHD, coronagraph, and radio data")
     ap.add_argument("--version", action="version", version=f"corona3d {__version__}")
-    ap.add_argument("--home", help="working directory (default: CORONA3D_HOME or the current folder)")
+    ap.add_argument("--home", help="working directory (default: CORONA3D_HOME, the current folder if it holds a "
+                    "config.json, else the platform cache directory; `corona3d doctor` shows it)")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    d = sub.add_parser("doctor", help="report the installed extras, the data directories, and the reachable archives")
+    d.add_argument("--offline", action="store_true", help="do not contact the archives")
     i = sub.add_parser("init", help="create a working directory with an event in config.json")
     i.add_argument("--event", default="2013-10-25", help="event preset: " + ", ".join(paths.events()))
     n = sub.add_parser("new", help="write config.json for a new event from its time and flare position")
@@ -66,6 +77,11 @@ def main(argv=None):
                     help="refit without a view whose IoU is far below the others and keep the refit when it is better "
                          "(default; rule in docs/METHODS.md)")
     g.add_argument("--keep-all-views", dest="drop_poor_views", action="store_false", help="fit all views as given")
+    g.add_argument("--onset", help="flare onset (ISO time) that fixes the base window of the envelopes (default: the "
+                    "reconstruction time)")
+    g.add_argument("--base-minutes", type=float, default=10.0, metavar="N",
+                    help="the base frame is the last frame at or before onset minus N minutes (default 10), "
+                         "so that the fit does not depend on when the download starts")
     g.add_argument("--skip-step1", action="store_true", help="take step 1 from the gcs_fit.json of the working directory")
     ev = sub.add_parser("event", help="new, fetch, radio-interval, gcs, and render for an event, with a report",
                         description="Runs every step for one event in the working directory and writes event_report.md; "
@@ -89,6 +105,11 @@ def main(argv=None):
                     help="refit without a view whose IoU is far below the others and keep the refit when it is better "
                          "(default; rule in docs/METHODS.md)")
     ev.add_argument("--keep-all-views", dest="drop_poor_views", action="store_false", help="fit all views as given")
+    ev.add_argument("--onset", help="flare onset (ISO time) that fixes the base window of the envelopes (default: the "
+                    "reconstruction time)")
+    ev.add_argument("--base-minutes", type=float, default=10.0, metavar="N",
+                    help="the base frame is the last frame at or before onset minus N minutes (default 10), "
+                         "so that the fit does not depend on when the download starts")
     ev.add_argument("--radio-search", type=float, default=10.0, metavar="MINUTES",
                     help="radio images are searched within MINUTES of --time (default 10)")
     ev.add_argument("--force", action="store_true", help="repeat the downloads, the fit, and the figures")
@@ -114,6 +135,9 @@ def main(argv=None):
     e.add_argument("--radio-sources", help='JSON list, as for render')
     a = ap.parse_args(argv)
 
+    if a.cmd == "doctor":
+        from . import doctor
+        sys.exit(doctor.run(a.home, network=not a.offline))
     if a.cmd == "init":
         h = paths.home(a.home, must_exist=False)
         h.mkdir(parents=True, exist_ok=True)

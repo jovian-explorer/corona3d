@@ -1,0 +1,5 @@
+include LICENSE README.md CHANGELOG.md CITATION.cff
+recursive-include docs *.md *.bib
+recursive-include tests *.py *.txt
+include scripts/gcs_fit_2013-10-25.json
+global-exclude __pycache__ *.py[cod]

@@ -38,6 +38,7 @@ KEYS = ["height", "kappa", "alpha_deg", "lon_stonyhurst", "lat_deg", "tilt_pythe
 IOU_MIN = 0.5                                          # mean IoU below which a fit counts as poor (`corona3d event`)
 POOR_RATIO = 0.75                                      # a view is poor below this fraction of the mean IoU of the others
 IMPROVE_MIN = 0.05                                     # a refit without a view must raise the mean IoU of the kept views by this
+BASE_MIN = 10.0                                        # base frame: the last frame at or before onset minus this many minutes
 
 
 def poor_view(iou, iou_min=IOU_MIN, ratio=POOR_RATIO):
@@ -130,10 +131,11 @@ def _load():
     import sunpy.map
     from astropy.coordinates import SkyCoord
     from astropy.io import fits
-    from PyThea.geometrical_models import gcs
+    from ._extras import need
+    gcs = need("gcs", "PyThea.geometrical_models", "the GCS fit").gcs
     from scipy.ndimage import binary_closing, binary_dilation, binary_fill_holes, gaussian_filter, label
     from scipy.optimize import differential_evolution
-    from skimage.morphology import convex_hull_image
+    convex_hull_image = need("gcs", "skimage.morphology", "the GCS fit").convex_hull_image
     from sunpy.coordinates import frames
 
 
@@ -237,12 +239,30 @@ def seq(f):
     return f.name.split("_")[-1][:2] if "_" in f.name else "c2"
 
 
-def bases_of(fr):
-    out = {}
+def base_cutoff(onset, minutes=BASE_MIN):
+    """Time of the fixed pre-event base window: `onset` (the flare onset, or the reconstruction time when
+    no onset is given) minus `minutes`. A datetime or ISO text is accepted."""
+    onset = datetime.fromisoformat(onset) if isinstance(onset, str) else onset
+    return onset - timedelta(minutes=minutes)
+
+
+def bases_of(fr, cutoff=None):
+    """{(instrument, programme): total-brightness map} of the frame subtracted in the envelopes. With
+    `cutoff` it is the last frame of the programme at or before that time, so the base does not depend
+    on when the download started; when the programme has no frame that early, the earliest frame is
+    used (listed in the second returned value, {(instrument, programme): first frame time}). Without
+    `cutoff` the earliest frame of each programme is used."""
+    out, late = {}, {}
     for k, frs in fr.items():
-        for _, files in frs:
-            out.setdefault((k, seq(files[0])), total_b(files))
-    return out
+        progs = {}
+        for t, files in frs:
+            progs.setdefault(seq(files[0]), []).append((t, files))
+        for s, lst in progs.items():
+            early = [f for f in lst if cutoff is None or f[0] <= cutoff]
+            if not early:
+                late[(k, s)] = lst[0][0].isoformat()
+            out[(k, s)] = total_b((early[-1] if early and cutoff is not None else lst[0])[1])
+    return out, late
 
 
 def base_of(fr, base, k, t, files, running=None):
@@ -313,18 +333,28 @@ def extrapolate(times, heights, t0):
 
 
 def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=None, previous=None,
-        running=None, height_out=None, height_note=None, drop_poor_views=True, iou_min=IOU_MIN):
+        running=None, height_out=None, height_note=None, drop_poor_views=True, iou_min=IOU_MIN,
+        onset=None, base_minutes=BASE_MIN):
     """Two-step fit of a CME from the images in the folder wl; returns the result dictionary
     (keys t_ref, t_out, height_time, fit). `previous` is an earlier result whose step 1 is reused,
     `running` the minutes of a running difference (default: difference from the first frame), and
     `height_out` an apex height at t_out given by hand (with `height_note`) in place of step 2.
     With `drop_poor_views` a view whose IoU is far below the others is left out and the fit repeated
-    (see check_views); the result then has the key `view_check` with both fits."""
+    (see check_views); the result then has the key `view_check` with both fits. The base frame is the
+    last frame of each programme at or before `onset` (default t_out) minus `base_minutes`, recorded in
+    the key `base` of the result."""
     _load()
     flare = tuple(flare)
     fr = {k: frames_of(wl, k) for k in keys}
-    base = bases_of(fr)                                  # earliest frame of each programme
-    print("bases:", {f"{k}/{s}": m.date.isot[:19] for (k, s), m in base.items()})
+    onset = onset or t_out
+    cutoff = base_cutoff(onset, base_minutes)
+    base, late = bases_of(fr, cutoff)                    # fixed pre-event window, not the first downloaded frame
+    base_rec = dict(onset=str(onset), minutes=base_minutes, cutoff=cutoff.isoformat(),
+                    frames={f"{k}/{s}": m.date.isot[:19] for (k, s), m in base.items()},
+                    fallback_earliest=[f"{k}/{s}" for (k, s) in late])
+    print("bases (last frame at or before %s):" % cutoff.isoformat(), base_rec["frames"])
+    if late:
+        print("  no frame that early for", base_rec["fallback_earliest"], "- earliest frame used; download an earlier start")
 
     tr = datetime.fromisoformat(t_ref)
     allkeys = tuple(keys)
@@ -350,7 +380,8 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
         for line in view_lines(rec):
             print("views:", line)
     keys = tuple(V)
-    out = {"t_ref": dict(zip(KEYS, [round(float(v), 3) for v in q24]), time=t_ref,
+    out = {"base": base_rec,
+           "t_ref": dict(zip(KEYS, [round(float(v), 3) for v in q24]), time=t_ref,
                          iou={k: round(float(v.iou(shell(q24, t_ref))), 3) for k, (_, v) in V.items()})}
     if rec:
         out["view_check"] = rec
@@ -372,7 +403,7 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     rows = []
     for tf, files in fr[k]:
         b = base_of(fr, base, k, tf, files, running)
-        if b is None or b.date.isot[:19] == tf.isoformat():  # the base frame itself
+        if b is None or b.date.isot[:19] >= tf.isoformat():  # the base frame itself, or a frame before it
             continue
         img = total_b(files)
         dm = sunpy.map.Map(img.data - b.data, img.meta)
@@ -413,6 +444,8 @@ def config_update(out, flare, keys, fix_direction=False, running=None):
            "iou": out["t_ref"]["iou"], "flare": list(flare), "running_diff_min": running,
            "fixed": ["lon_stonyhurst", "lat_deg"] if fix_direction else [],
            "height_t_out": out["fit"]["height_t_out"]}
+    if out.get("base"):
+        rec["base"] = out["base"]
     if dropped:
         rec["views_dropped"] = list(dropped)
     if out["fit"].get("assumed"):
@@ -439,7 +472,8 @@ def run(home, cfg, a):
     previous = json.loads(out_file.read_text(encoding="utf-8")) if a.skip_step1 else None
     out = fit(a.wl or wl_dir(home), t_ref, t_out, flare, keys, a.fix_direction, a.front, previous,
               a.running_diff, a.height_out, a.height_note,
-              drop_poor_views=getattr(a, "drop_poor_views", True))
+              drop_poor_views=getattr(a, "drop_poor_views", True), onset=getattr(a, "onset", None),
+              base_minutes=getattr(a, "base_minutes", BASE_MIN))
     write_result(home, out, flare, keys, a.fix_direction, a.running_diff)
     if a.t_ref:
         set_wl_time(home, a.t_ref)

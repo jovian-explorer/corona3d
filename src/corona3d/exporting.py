@@ -151,7 +151,8 @@ def _write_csv(rec, d):
 
 
 def _write_vtk(rec, d):
-    import pyvista as pv
+    from ._extras import need
+    pv = need("render", "pyvista", "the VTK export")
     from .reconstruction import polyline
     if rec.surface:
         s = rec.surface

@@ -10,7 +10,6 @@ from pathlib import Path
 
 import astropy.units as u
 import numpy as np
-import pyvista as pv
 from matplotlib import cm, colors
 from matplotlib.figure import Figure
 from matplotlib import colormaps
@@ -18,8 +17,11 @@ from scipy.spatial.transform import Rotation
 
 from . import mast_model
 from .geometry import CLOSED, OPEN, FieldTracer, deproject, fibonacci_sphere, observer_basis, pythea_shell, unit_vec
+from ._extras import need
 from .layers import LAYERS, ON
 from .paths import config, default_config, merge, model_dir, wl_dir
+
+pv = need("render", "pyvista", "the drawing of the figure")
 
 WL = ("c2", "cor1", "cor2")
 IMAGES_OF = {"earth": ("c2",), "stereo": ("cor2", "cor1")}

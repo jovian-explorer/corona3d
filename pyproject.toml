@@ -9,23 +9,46 @@ description = "Three-dimensional reconstruction of a coronal mass ejection and t
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [{name = "Keshav Aggarwal", email = "keshavaggarwal2310@gmail.com"}]
 keywords = ["solar physics", "corona", "coronal mass ejection", "MHD", "Alfven speed", "radio bursts", "LASCO", "STEREO"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-# lower bounds: the versions tested; PyThea pinned to its minor version (corona3d uses
-# gcs.rcenter_ and the vertex counts of its gcs class)
+# Lower bounds are the versions tested (Python 3.12 and 3.13). Python 3.12 is the floor because PyThea 1.3
+# and SunPy 7 and later require it. The core install fetches data, sets up an event, and runs the radio
+# interval; the figures, the GCS fit, and the OVRO-LWA reader are optional extras.
 dependencies = [
-    "numpy>=1.26", "scipy>=1.11", "matplotlib>=3.8", "pyvista>=0.43", "pyhdf>=0.11",
-    "astropy>=6.0", "sunpy[net,map]>=6.0", "PyThea>=1.3,<1.4", "h5py>=3.8",
+    "numpy>=1.26", "scipy>=1.11", "matplotlib>=3.8", "astropy>=6.0", "sunpy[net,map]>=7.1",
+    "pyhdf>=0.11", "platformdirs>=3.0",
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pillow"]
-fit = ["scikit-image>=0.22"]
+# the figure and the Python interface: PyVista draws, PyThea builds the CME shell (corona3d uses
+# gcs.rcenter_ and the vertex counts of its gcs class, so it is pinned to its minor version)
+render = ["pyvista>=0.43", "PyThea>=1.3,<1.4"]
+# the GCS fit of corona3d gcs and corona3d event
+gcs = ["PyThea>=1.3,<1.4", "scikit-image>=0.22"]
+# the OVRO-LWA image reader (the NRH reader needs only the core)
+radio = ["h5py>=3.8"]
+docs = ["mkdocs>=1.5", "mkdocs-material>=9"]
+test = ["pytest>=7", "pillow>=10"]
+all = ["corona3d[render,gcs,radio]"]
+
+[project.urls]
+Homepage = "https://jovian-explorer.github.io/software.html#corona3d"
+Documentation = "https://github.com/jovian-explorer/corona3d/blob/main/docs/USER_GUIDE.md"
+Source = "https://github.com/jovian-explorer/corona3d"
+Issues = "https://github.com/jovian-explorer/corona3d/issues"
+Changelog = "https://github.com/jovian-explorer/corona3d/blob/main/CHANGELOG.md"
 
 [project.scripts]
 corona3d = "corona3d.cli:main"

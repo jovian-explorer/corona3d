@@ -10,7 +10,6 @@ from pathlib import Path
 
 import astropy.units as u
 import numpy as np
-import pyvista as pv
 import sunpy.map
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
@@ -124,6 +123,8 @@ def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B"):
     v[(r < lo) | (r > hi)] = np.nan
     ex, ey, _ = observer_basis(*observer)
     P = X[..., None] * ex + Y[..., None] * ey
+    from ._extras import need
+    pv = need("render", "pyvista", "the coronagraph layer")
     grid = pv.StructuredGrid(P[..., 0, None], P[..., 1, None], P[..., 2, None])
     grid["wl"] = v[..., None].ravel(order="F")
     tb = frames[0][0]

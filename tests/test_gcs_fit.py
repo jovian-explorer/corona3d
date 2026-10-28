@@ -224,6 +224,7 @@ def test_drops_stop_at_one_view_and_follow_the_worst_first():
     assert [r["dropped"] for r in rec["refits"]] == ["c", "b"]
 
 
+@needs_tree
 def test_the_command_records_dropped_views_in_config_and_gcs_fit_json(tmp_path, monkeypatch):
     main(["--home", str(tmp_path), "init"])
     seen = {}
@@ -242,3 +243,43 @@ def test_the_command_records_dropped_views_in_config_and_gcs_fit_json(tmp_path, 
     assert json.loads((tmp_path / "gcs_fit.json").read_text())["view_check"]["dropped"] == ["cor1a"]
     main(["--home", str(tmp_path), "gcs", "--keep-all-views"])
     assert seen["drop_poor_views"] is False
+
+
+def _frames(start, n=12):
+    return {"cor1a": [(start + timedelta(minutes=5 * i), [Path(f"x_s4c1A_{i}")]) for i in range(n)]}
+
+
+def test_base_frame_is_fixed_by_the_onset_and_not_by_the_start_of_the_download(monkeypatch):
+    """The last frame at or before onset minus N minutes is the base, whatever earlier frames were downloaded."""
+    monkeypatch.setattr(G, "total_b", lambda files: files[0].name)
+    monkeypatch.setattr(G, "seq", lambda f: "s4")
+    onset = datetime(2024, 5, 9, 17, 23)
+    cut = G.base_cutoff(onset, 10)
+    assert cut == datetime(2024, 5, 9, 17, 13)
+    for start in (datetime(2024, 5, 9, 16, 0), datetime(2024, 5, 9, 16, 45)):   # a long download and a short one
+        fr = _frames(start, 40)
+        base, late = G.bases_of(fr, cut)
+        assert late == {} and base[("cor1a", "s4")] == [f for f in fr["cor1a"] if f[0] == datetime(2024, 5, 9, 17, 10)][0][1][0].name
+    assert G.base_cutoff("2024-05-09T17:23:00", 0) == onset
+
+
+def test_base_frame_falls_back_to_the_earliest_frame_and_says_so(monkeypatch):
+    monkeypatch.setattr(G, "total_b", lambda files: files[0].name)
+    monkeypatch.setattr(G, "seq", lambda f: "s4")
+    fr = _frames(datetime(2024, 5, 9, 17, 20))
+    base, late = G.bases_of(fr, datetime(2024, 5, 9, 17, 10))
+    assert base[("cor1a", "s4")] == "x_s4c1A_0" and list(late) == [("cor1a", "s4")]
+    base, late = G.bases_of(fr, None)                              # no cutoff: the earliest, nothing reported
+    assert base[("cor1a", "s4")] == "x_s4c1A_0" and late == {}
+
+
+def test_base_is_recorded_in_the_provenance():
+    out = {"base": {"onset": "2024-05-09T17:23", "minutes": 10.0, "cutoff": "2024-05-09T17:13:00",
+                    "frames": {"cor1a/s4": "2024-05-09T17:10:00"}, "fallback_earliest": []},
+           "t_ref": {"height": 3, "kappa": .3, "alpha_deg": 20, "lon_stonyhurst": 28, "lat_deg": -14,
+                     "tilt_pythea_deg": 0, "time": "2024-05-09T17:55", "iou": {"cor1a": .8}},
+           "t_out": {"height": 1.77, "kappa": .3, "alpha_deg": 20, "lon_stonyhurst": 28, "lat_deg": -14,
+                     "tilt_pythea_deg": 0, "time": "2024-05-09T17:32"},
+           "fit": {"height_t_out": 1.77, "assumed": True, "note": "x"}}
+    rec = G.config_update(out, (28, -14), ("cor1a",))["gcs_fit"]
+    assert rec["base"]["cutoff"] == "2024-05-09T17:13:00" and rec["base"]["frames"]["cor1a/s4"].endswith("17:10:00")

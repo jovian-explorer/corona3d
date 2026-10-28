@@ -123,7 +123,8 @@ def pythea_shell(height, kappa, alpha_deg, lon_stonyhurst, lat_deg, tilt_pythea_
     import astropy.units as u
     from astropy.coordinates import SkyCoord
     from sunpy.coordinates import frames
-    from PyThea.geometrical_models import gcs
+    from ._extras import need
+    gcs = need("render", "PyThea.geometrical_models", "the CME shell").gcs
 
     rc = gcs.rcenter_(height * u.R_sun, alpha_deg * u.deg, kappa)
     c = SkyCoord(lon_stonyhurst * u.deg, lat_deg * u.deg, rc,
