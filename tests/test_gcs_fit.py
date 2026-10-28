@@ -196,7 +196,7 @@ def test_a_poor_view_that_costs_the_others_nothing_is_still_dropped():
     views, q, iou, rec = G.check_views(vs, tuple(vs), ious[tuple(vs)], lambda v: tuple(v), lambda v, q: ious[q])
     assert list(views) == ["cor1a"] and rec["dropped"] == ["cor2a"] and rec["kept"] == "refit"
     assert rec["refits"][0]["mean_iou"] == 0.902 and rec["full"]["mean_iou"] == 0.45
-    assert G.quality(dict(t_ref=dict(iou=iou, height=5.4, kappa=0.4, alpha_deg=25.0, lon_stonyhurst=36.0,
+    assert G.quality(dict(t_ref=dict(iou=iou, height=3.5, kappa=0.4, alpha_deg=25.0, lon_stonyhurst=36.0,
                                      lat_deg=3.0, tilt_pythea_deg=-30.0)), (28.0, -14.0)) == []
 
 
@@ -347,7 +347,7 @@ def test_the_cone_narrows_the_direction_bounds_around_the_flare():
 
 
 def test_a_direction_at_the_edge_of_the_cone_is_not_a_poor_fit_but_is_recorded():
-    shell = dict(height=5.5, kappa=0.4, alpha_deg=25.0, lon_stonyhurst=-109.0, lat_deg=-6.0, tilt_pythea_deg=-30.0)
+    shell = dict(height=3.5, kappa=0.4, alpha_deg=25.0, lon_stonyhurst=-109.0, lat_deg=-6.0, tilt_pythea_deg=-30.0)
     out = {"t_ref": dict(shell, time="2024-05-09T18:06:00", iou={"cor1a": 0.9}),
            "t_out": dict(shell, height=1.77, time="2024-05-09T17:32:00"),
            "fit": dict(height_t_out=1.77, assumed=True, note="kinematic assumption")}
@@ -420,3 +420,53 @@ def test_bound_hits_name_the_parameters_and_leave_a_direction_at_the_cone_alone(
     t = dict(height=5.0, kappa=0.1, alpha_deg=59.9, lon_stonyhurst=43.0, lat_deg=-16.0, tilt_pythea_deg=-30.0)
     assert [h[0] for h in G.bound_hits(t, (28.0, -14.0), fix_direction=True)] == ["kappa", "alpha_deg"]
     assert G.quality(dict(t_ref=dict(t, iou=dict(a=0.8))), (28.0, -14.0), True) != []
+
+
+def _result(views, **shell):
+    t = dict(height=3.0, kappa=0.4, alpha_deg=25.0, lon_stonyhurst=36.0, lat_deg=-6.0, tilt_pythea_deg=-30.0, **shell)
+    return {"t_ref": dict(t, iou={k: 0.8 for k in views}), "views_used": list(views)}
+
+
+def test_the_height_bound_follows_the_outer_field_of_view_of_the_fitted_views():
+    assert G.height_limit(["cor1a"]) == pytest.approx(G.HEIGHT_FOV_FACTOR * 4.0)            # 6 R_sun
+    assert G.height_limit(["c2", "cor1a"]) == pytest.approx(G.HEIGHT_FOV_FACTOR * 6.0)      # the largest field decides
+    assert G.height_limit(["cor2a"]) == G.HEIGHT_MAX                                        # 22.5 is capped at 15
+    flare = (28.0, -14.0)
+    for fixed in (False, True):
+        assert G.bounds(flare, fixed, None, G.height_limit(["cor1a"]))[0] == (1.5, 6.0)
+    assert G.bounds(flare)[0] == (1.5, G.HEIGHT_MAX)
+
+
+def test_a_height_at_the_new_upper_bound_is_a_bound_hit_and_poor():
+    out = _result(["cor1a"])
+    out["t_ref"]["height"] = 6.0
+    out["height_bound"] = dict(max=G.height_limit(["cor1a"]))
+    assert [h[0] for h in G.bound_hits(out["t_ref"], (28.0, -14.0), False, 6.0)] == ["height"]
+    assert any("height = 6 is at its bound (1.5 to 6)" in w for w in G.quality(out, (28.0, -14.0)))
+    out["t_ref"]["height"] = 5.0                                    # inside the field and the bound
+    assert G.quality(out, (28.0, -14.0)) == [] or all("height" not in w for w in G.quality(out, (28.0, -14.0)))
+
+
+def test_a_needle_shell_is_poor_even_when_its_iou_is_high():
+    out = _result(["cor1a"])
+    out["t_ref"]["alpha_deg"] = 1.7
+    assert any("degenerate shell" in w for w in G.quality(out, (28.0, -14.0)))
+    out["t_ref"]["alpha_deg"] = G.ALPHA_MIN + 0.5
+    assert not any("degenerate" in w for w in G.quality(out, (28.0, -14.0)))
+
+
+def test_an_apex_outside_every_fitted_field_is_poor_and_one_view_in_range_is_enough():
+    out = _result(["cor1a"])
+    out["t_ref"]["height"] = 5.0                                    # cor1a sees out to 4 R_sun
+    assert any("outside the field of view of every fitted view" in w for w in G.quality(out, (28.0, -14.0)))
+    out = _result(["cor1a", "c2"])
+    out["t_ref"]["height"] = 5.0                                    # C2 sees out to 6 R_sun
+    assert not any("outside the field" in w for w in G.quality(out, (28.0, -14.0)))
+
+
+def test_the_height_bound_is_recorded_in_the_fit_provenance():
+    out = _result(["cor1a"])
+    out.update(height_bound=dict(max=6.0, factor=1.5, cap=15.0, views=["cor1a"], outer_fov=4.0),
+               t_out=dict(out["t_ref"], height=1.77, time="t"), fit=dict(height_t_out=1.77, assumed=True, note="n"))
+    out["t_ref"]["time"] = "t"
+    assert G.config_update(out, (28.0, -14.0), ("cor1a",))["gcs_fit"]["height_bound"]["max"] == 6.0

@@ -44,6 +44,9 @@ DEV_MARGIN = 0.2                                       # R_sun: ... when its fro
 SCAN_MIN = 150.0                                       # the automatic t_ref is searched up to this many minutes after t_out
 MIN_SEP = 30.0                                         # deg: views whose observers are closer than this cannot fix the direction
 CONE = 15.0                                            # deg: default half-width of the direction cone around the flare site
+HEIGHT_MAX = 15.0                                      # R_sun: absolute upper bound of the apex height of a fit
+HEIGHT_FOV_FACTOR = 1.5                                # the apex height of a fit is at most this factor times the largest outer field-of-view radius of the fitted views
+ALPHA_MIN = 5.0                                        # deg: a half-angle below this is a degenerate (needle) shell and the fit counts as poor
 BASE_MIN = 10.0                                        # base frame: the last frame at or before onset minus this many minutes
 
 
@@ -191,27 +194,39 @@ def direction_limit(xyz, cone=CONE, min_sep=MIN_SEP):
                 text=f"direction constrained by the source region ({why})")
 
 
-def bounds(flare, fix_direction=False, cone=None):
+def height_limit(views):
+    """Upper bound of the apex height in R_sun for a fit to `views` (names): HEIGHT_FOV_FACTOR times the largest
+    outer field-of-view radius among them, never above HEIGHT_MAX. The images cannot constrain an apex far
+    outside the field, where only the legs of the shell would be matched."""
+    outer = [FOV[k][1] for k in views if k in FOV]
+    return min(HEIGHT_MAX, HEIGHT_FOV_FACTOR * max(outer)) if outer else HEIGHT_MAX
+
+
+def bounds(flare, fix_direction=False, cone=None, height_max=HEIGHT_MAX):
     """Bounds of the optimised parameters: height, kappa, alpha, [lon, lat unless fixed], tilt. `cone` (deg)
-    narrows the direction to the flare site plus or minus the cone."""
+    narrows the direction to the flare site plus or minus the cone; `height_max` is the upper height bound
+    (height_limit of the fitted views)."""
     dl, db = (40.0, 35.0) if not cone else (min(cone, 40.0), min(cone, 35.0))
-    return [(1.5, 15.0), (0.1, 0.8), (0.0, 60.0)] + ([] if fix_direction else
+    return [(1.5, float(height_max)), (0.1, 0.8), (0.0, 60.0)] + ([] if fix_direction else
             [(flare[0] - dl, flare[0] + dl), (flare[1] - db, flare[1] + db)]) + [(-90.0, 90.0)]
 
 
-def bound_hits(t, flare, fix_direction=False):
+def bound_hits(t, flare, fix_direction=False, height_max=HEIGHT_MAX):
     """Parameters of `t` (dict of KEYS, or the six values in KEYS order) within 0.5 % of their range of a bound
-    of the optimisation: [(name, value, low, high)]. lon/lat are not tested when the direction is fixed or tied."""
+    of the optimisation: [(name, value, low, high)]. lon/lat are not tested when the direction is fixed or tied;
+    `height_max` is the upper height bound used in the fit."""
     t = dict(zip(KEYS, t)) if not isinstance(t, dict) else t
     names = ["height", "kappa", "alpha_deg"] + ([] if fix_direction else ["lon_stonyhurst", "lat_deg"]) + ["tilt_pythea_deg"]
-    return [(n, t[n], lo, hi) for n, (lo, hi) in zip(names, bounds(flare, fix_direction))
+    return [(n, t[n], lo, hi) for n, (lo, hi) in zip(names, bounds(flare, fix_direction, None, height_max))
             if min(t[n] - lo, hi - t[n]) <= 0.005 * (hi - lo)]
 
 
 def quality(out, flare, fix_direction=False, iou_min=IOU_MIN):
     """Problems of a result of fit(): [] when it is acceptable. A fit is poor when the mean IoU
     over the instruments is below iou_min, when no instrument gave an IoU, or when a fitted
-    parameter lies within 0.5 % of its range from a bound of the optimisation."""
+    parameter lies within 0.5 % of its range from a bound of the optimisation (the upper height bound is the one
+    recorded in out["height_bound"], else HEIGHT_MAX). It is also poor when the half-angle is below ALPHA_MIN (a
+    degenerate shell) or when the apex height at t_ref lies outside the outer field of view of every fitted view."""
     t, why = out["t_ref"], []
     tied = bool((out.get("direction") or {}).get("constrained"))   # a prior from the source region, not a limit of the data
     fix_direction = fix_direction or tied
@@ -220,8 +235,14 @@ def quality(out, flare, fix_direction=False, iou_min=IOU_MIN):
         why.append("no instrument had an envelope")
     elif np.mean(list(iou.values())) < iou_min:
         why.append(f"mean IoU {np.mean(list(iou.values())):.2f} is below {iou_min:g}")
-    for n, v, lo, hi in bound_hits(t, flare, fix_direction):
+    hmax = (out.get("height_bound") or {}).get("max", HEIGHT_MAX)
+    for n, v, lo, hi in bound_hits(t, flare, fix_direction, hmax):
         why.append(f"{n} = {v:g} is at its bound ({lo:g} to {hi:g})")
+    if t["alpha_deg"] < ALPHA_MIN:
+        why.append(f"half-angle alpha = {t['alpha_deg']:g} deg is below {ALPHA_MIN:g} deg (a degenerate shell)")
+    outer = [FOV[k][1] for k in (out.get("views_used") or iou) if k in FOV]
+    if outer and t["height"] > max(outer):
+        why.append(f"the apex at {t['height']:g} R_sun lies outside the field of view of every fitted view (out to {max(outer):g} R_sun)")
     return why
 
 
@@ -549,11 +570,11 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
             full = (lambda q: [q[0], q[1], q[2], flare[0], flare[1], q[3]]) if fixed else list
             cone = lim["cone_deg"] if lim else None
             cost = lambda q: 1.0 if q[1] >= 0.95 else 1.0 - np.mean([v.iou(shell(full(q), t_ref)) for _, v in vs.values()])
-            return full(list(differential_evolution(cost, bounds(flare, fixed, cone), popsize=12, maxiter=60, tol=1e-4,
+            return full(list(differential_evolution(cost, bounds(flare, fixed, cone, height_limit(vs)), popsize=12, maxiter=60, tol=1e-4,
                                                     seed=3, polish=True).x))
 
         score = lambda vs, q: {k: float(v.iou(shell(q, t_ref))) for k, (_, v) in vs.items()}
-        problems = lambda q, vs: [h[0] for h in bound_hits(q, flare, fix_direction or limit(vs) is not None)]
+        problems = lambda q, vs: [h[0] for h in bound_hits(q, flare, fix_direction or limit(vs) is not None, height_limit(vs))]
         q24 = solve(V)
         V, q24, _, rec = check_views(V, q24, score(V, q24), solve, score, iou_min, drop=drop_poor_views,
                                      limit=limit, problems=problems)
@@ -562,6 +583,8 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     keys = tuple(V)
     lim = None if previous else limit(V)
     out = {"base": base_rec, "views_used": list(keys),
+           "height_bound": dict(max=height_limit(keys), factor=HEIGHT_FOV_FACTOR, cap=HEIGHT_MAX, views=list(keys),
+                                outer_fov=max(FOV[k][1] for k in keys if k in FOV) if any(k in FOV for k in keys) else None),
            "t_ref": dict(zip(KEYS, [round(float(v), 3) for v in q24]), time=t_ref,
                          iou={k: round(float(v.iou(shell(q24, t_ref))), 3) for k, (_, v) in V.items()})}
     if rec:
@@ -634,6 +657,8 @@ def config_update(out, flare, keys, fix_direction=False, running=None):
            "height_t_out": out["fit"]["height_t_out"]}
     if out.get("base"):
         rec["base"] = out["base"]
+    if out.get("height_bound"):
+        rec["height_bound"] = out["height_bound"]
     if out.get("direction"):
         rec["direction_constraint"] = {k: v for k, v in out["direction"].items() if k != "constrained"}
     if out.get("t_ref_choice"):

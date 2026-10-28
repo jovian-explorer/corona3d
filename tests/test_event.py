@@ -27,7 +27,7 @@ def args(**kw):
 
 def result(iou=0.8, kappa=0.4, fixed=False):
     """A result of gcs.fit with the keys that gcs.config_update and the report read."""
-    shell = dict(height=5.5, kappa=kappa, alpha_deg=25.0, lon_stonyhurst=-69.0 if fixed else -60.0,
+    shell = dict(height=3.5, kappa=kappa, alpha_deg=25.0, lon_stonyhurst=-69.0 if fixed else -60.0,
                  lat_deg=-6.0 if fixed else -2.0, tilt_pythea_deg=-30.0)
     return {"t_ref": dict(shell, time="2013-10-25T16:00:00", iou={"c2": iou, "cor1b": iou}),
             "t_out": dict(shell, height=1.9, time="2013-10-25T15:00:00"),
