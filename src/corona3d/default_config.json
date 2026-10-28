@@ -77,7 +77,18 @@
   ],
   "wl_time": "2013-10-25T15:24",
   "wl_mode": "ratio",
-  "wl_opacity": 0.75,
+  "opacity": {
+    "sphere": 1.0,
+    "surface": 1.0,
+    "open": 0.08,
+    "closed": 0.12,
+    "streamer": 0.7,
+    "streamer_with_radio": 0.35,
+    "gcs": 1.0,
+    "radio": 1.0,
+    "radio_contours": 0.6,
+    "wl": 0.75
+  },
   "window": [
     1200,
     918

@@ -69,3 +69,22 @@ def test_radio_layer_draws_a_chain_of_blobs_per_frequency(synthetic_home):
     assert xyz2[0] @ ex == pytest.approx(-0.85, abs=0.02) and (xyz2 @ ez > 0).all()
     assert not np.allclose(rgb1[0], rgb1[-1])                # coloured from early to late
     assert len(sc["radio_contours"]) == 2
+
+
+def test_contours_are_drawn_at_every_level_and_nest_inwards(synthetic_home):
+    d = synthetic_home / "data" / "nrh"
+    d.mkdir()
+    write_nrh(d / "nrh2_1509_h60_20131025_145800c00_i.fts", 150.9, T0, 40, lambda k: (-1.0, -0.1))
+    on = dict(surface=False, sphere=False, open=False, closed=False, streamer=False, gcs=False, radio=True)
+    entry = dict(instrument="nrh", folder="data/nrh", freqs=[150.9], start="2013-10-25T14:59:00",
+                 end="2013-10-25T15:01:00", step_s=60, level=0.5, min_tb=1e8, contours=True,
+                 contour_levels=[0.9, 0.3, 0.6])
+    (f, levels), = reconstruct({"radio_images": [entry]}, on, synthetic_home)["radio_contours"]
+    assert [lev for lev, _ in levels] == [0.3, 0.6, 0.9]          # from the lowest to the highest
+    ex, ey, _ = observer_basis(*EARTH)
+    centre = np.array([-1.0, -0.1])
+    size = [max(np.hypot(c @ ex - centre[0], c @ ey - centre[1]).max() for c in lines) for _, lines in levels]
+    assert size[0] > size[1] > size[2]                            # higher levels lie inside lower ones
+    entry.pop("contour_levels")
+    (_, levels), = reconstruct({"radio_images": [entry]}, on, synthetic_home)["radio_contours"]
+    assert [lev for lev, _ in levels] == [0.5]                    # without levels: the level of the centroid

@@ -19,6 +19,32 @@ def gcs_views(text):
     return ",".join(dict.fromkeys(out))
 
 
+OPACITY_KEYS = ("sphere", "surface", "open", "closed", "streamer", "streamer_with_radio", "gcs", "radio",
+                "radio_contours", "wl")
+
+
+def floats(text):
+    """'0.3,0.5,0.9' -> [0.3, 0.5, 0.9]."""
+    try:
+        return [float(x) for x in text.split(",")]
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a comma list of numbers")
+
+
+def parse_opacity(text):
+    """'radio_contours=0.2,1' -> ('radio_contours', [0.2, 1.0]); 'wl=0.5' -> ('wl', 0.5);
+    'surface=linear' -> ('surface', 'linear')."""
+    k, _, v = text.partition("=")
+    k = k.strip()
+    if k not in OPACITY_KEYS or not v:
+        sys.exit(f"--opacity {text}: give LAYER=VALUE with LAYER one of {', '.join(OPACITY_KEYS)}")
+    try:
+        vals = floats(v)
+    except argparse.ArgumentTypeError:
+        return k, v.strip()
+    return k, vals[0] if len(vals) == 1 else vals
+
+
 def main(argv=None):
     from ._extras import MissingExtra
     try:
@@ -147,6 +173,14 @@ def _main(argv=None):
                         "longitude and latitude of the viewing direction with an optional roll, "
                         "e.g. b=300,20 or c=120,-10,45 (repeatable)")
     r.add_argument("--radio-sources", help='JSON list, e.g. [{"freq": 173, "x": -1.1, "y": -0.1}]')
+    r.add_argument("--opacity", action="append", default=[], metavar="LAYER=VALUE",
+                   help="opacity of a layer from 0 (transparent) to 1: one number, or for radio, radio_contours, "
+                        "surface and wl a comma list (per blob from early to late, per contour level from the lowest "
+                        "to the highest, or over the colour range), or for surface and wl a transfer function such as "
+                        "linear or sigmoid; layers: " + ", ".join(OPACITY_KEYS) + " (repeatable)")
+    r.add_argument("--contours", action="store_true", help="draw the contours of the last radio image of every frequency")
+    r.add_argument("--contour-levels", type=floats, metavar="L1,L2,...",
+                   help="contour levels as fractions of the peak of the image, e.g. 0.3,0.5,0.7,0.9 (implies --contours)")
     e = sub.add_parser("export", help="write every enabled layer to data files with a JSON metadata sidecar",
                        epilog="layers: " + ", ".join(LAYERS))
     for k in LAYERS:
@@ -247,6 +281,14 @@ def _main(argv=None):
         params["shell_on_top"] = True
     if a.radio_sources:
         params["radio_sources"] = json.loads(a.radio_sources)
+    if a.opacity:
+        params["opacity"] = dict(parse_opacity(t) for t in a.opacity)
+        if "wl" in params["opacity"]:
+            params["wl_opacity"] = params["opacity"]["wl"]   # replaces a wl_opacity of config.json
+    if a.contours or a.contour_levels:
+        params["radio_images"] = [dict(e, contours=True, **({"contour_levels": a.contour_levels}
+                                                            if a.contour_levels else {}))
+                                  for e in cfg["radio_images"]]
     from .reconstruction import make_figure, parse_view
     if a.view:
         views = [dict(v) for v in cfg["views"]]

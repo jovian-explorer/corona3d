@@ -160,13 +160,14 @@ def reconstruct(p=None, on=None, data_root="."):
                 h = newkirk_r(f)
                 cmap = colormaps[p["radio_colormaps"][j % len(p["radio_colormaps"])]]
                 j += 1
-                blobs = []                                 # one per step between start and end
+                blobs, last = [], None                     # one per step between start and end
                 t = t0
                 while t <= t1:
                     img, tf, x, y = mod.image_at(folder, f, t)
                     lines, (cx, cy), tb = nrh.source(img, x, y, rs["level"])
                     if tb >= rs["min_tb"] and (not blobs or blobs[-1][0] != tf):
                         blobs.append((tf, cx, cy, tb, lines))
+                        last = (img, x, y)
                     t += timedelta(seconds=rs["step_s"])
                 label = f"{names[rs['instrument']]} {f:g} MHz"
                 if not blobs:
@@ -179,9 +180,11 @@ def reconstruct(p=None, on=None, data_root="."):
                 sc["radio_blobs"].append(dict(instrument=rs["instrument"], freq=f, r=h, xyz=xyz,
                                               time=[tf for tf, *_ in blobs], x=xy[:, 0], y=xy[:, 1],
                                               tb=np.array([b[3] for b in blobs])))
-                if rs["contours"]:
-                    sc["radio_contours"].append((f, [deproject(c[:, 0], c[:, 1], h, *p["earth"], warn=False)
-                                                     for c in blobs[-1][4]]))
+                if rs["contours"]:                         # of the last image, at each level of its peak
+                    levels = sorted(rs.get("contour_levels") or [rs["level"]])
+                    sc["radio_contours"].append((f, [(lev, [deproject(c[:, 0], c[:, 1], h, *p["earth"], warn=False)
+                                                            for c in nrh.source(*last, lev)[0]])
+                                                     for lev in levels]))
                 sc["times"].setdefault("radio", []).append((label, blobs[0][0], blobs[-1][0], len(blobs)))
                 for (tf, cx, cy, tb, _) in blobs:
                     print(f"radio: {label} {tf:%H:%M:%S} UT, peak {tb:.2e} K, centroid "
@@ -213,19 +216,49 @@ def polyline(list_of_pts):
     return poly
 
 
+VARIABLE = ("surface", "wl")                         # opacity may vary with the value of the pixel
+PER_ITEM = ("radio", "radio_contours")               # opacity may vary along the chain or over the levels
+
+
+def check_opacity(op):
+    """Raise ValueError unless every opacity is a number from 0 to 1, a list of such numbers (for
+    the layers in VARIABLE and PER_ITEM), or the name of a PyVista transfer function such as
+    "linear" or "sigmoid" (for the layers in VARIABLE)."""
+    for k, v in op.items():
+        if isinstance(v, str) and k in VARIABLE:
+            continue
+        vals = v if isinstance(v, (list, tuple)) and k in VARIABLE + PER_ITEM else [v]
+        if not len(vals) or not all(isinstance(x, (int, float)) and not isinstance(x, bool) and 0 <= x <= 1
+                                    for x in vals):
+            kinds = ("a number from 0 to 1" + (", a list of them" if k in VARIABLE + PER_ITEM else "")
+                     + (", or a transfer function such as linear" if k in VARIABLE else ""))
+            raise ValueError(f"opacity of {k}: {v!r}; give {kinds}")
+
+
+def opacities(value, n):
+    """n opacities from a number (all equal) or a list, which is stretched over the n items when its
+    length differs from n (the first value to the first item, the last value to the last)."""
+    v = np.atleast_1d(np.asarray(value, float))
+    if len(v) == n or len(v) == 1:
+        return np.broadcast_to(v, (n,)).copy()
+    return np.interp(np.linspace(0, 1, n), np.linspace(0, 1, len(v)), v)
+
+
 def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
+    op = p["opacity"]
     pl = pv.Plotter(off_screen=True, window_size=p["window"])
     pl.set_background("white")
     if on["sphere"]:
         pl.add_mesh(pv.Sphere(radius=p["sphere_r"], theta_resolution=120, phi_resolution=120),
-                    color="#9e9e9e", smooth_shading=True, specular=0.1)
+                    color="#9e9e9e", smooth_shading=True, specular=0.1, opacity=op["sphere"])
     if on["surface"]:
         pl.add_mesh(sc["surface"], scalars="va", cmap="Spectral_r", clim=p["va_range"],
-                    smooth_shading=True, specular=0.1, show_scalar_bar=False)
-    for key, kw in (("open", dict(color="black", line_width=2.5, opacity=0.08)),
-                    ("closed", dict(color="#8c8c8c", line_width=2.5, opacity=0.12)),
+                    smooth_shading=True, specular=0.1, show_scalar_bar=False, opacity=op["surface"])
+    for key, kw in (("open", dict(color="black", line_width=2.5, opacity=op["open"])),
+                    ("closed", dict(color="#8c8c8c", line_width=2.5, opacity=op["closed"])),
                     ("streamer", dict(color="#9a6fc0", line_width=3.0,
-                                      opacity=0.35 if sc.get("radio") and on["radio"] else 0.7))):
+                                      opacity=op["streamer_with_radio"] if sc.get("radio") and on["radio"]
+                                      else op["streamer"]))):
         if on[key] and sc[key]:
             lines = sc[key]
             if key == "streamer" and len(lines) > p["streamer_max_lines"]:    # an even subset
@@ -233,14 +266,20 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
             pl.add_mesh(polyline(lines), **kw)
     if on["gcs"]:
         shell = pl.add_mesh(polyline(list(sc["gcs"])), color=p["mesh_rings"]["color"],
-                            line_width=p["mesh_rings"]["width"])
-    for f, lines in (sc.get("radio_contours", []) if on["radio"] else []):
-        if lines:
-            pl.add_mesh(polyline(lines), color=cm.cool(np.clip((f - 150) / 300, 0, 1))[:3], line_width=4.0)
+                            line_width=p["mesh_rings"]["width"], opacity=op["gcs"])
+    for f, levels in (sc.get("radio_contours", []) if on["radio"] else []):
+        # the levels run from the lowest to the highest, and so do the opacities
+        for (lev, lines), a in zip(levels, opacities(op["radio_contours"], len(levels))):
+            if lines:
+                pl.add_mesh(polyline(lines), color=cm.cool(np.clip((f - 150) / 300, 0, 1))[:3], line_width=4.0,
+                            opacity=float(a))
     blobs = []
     for f, xyz, rgb in (sc.get("radio", []) if on["radio"] else []):
         cloud = pv.PolyData(xyz)
+        alpha = opacities(op["radio"], len(xyz))                # from the first image to the last
         cloud["rgb"] = (np.asarray(rgb) * 255).astype(np.uint8)
+        if (alpha < 1).any():                                   # one alpha per blob, carried by its colour
+            cloud["rgb"] = np.c_[cloud["rgb"], (alpha * 255).round().astype(np.uint8)]
         blobs += [pl.add_mesh(cloud.glyph(geom=pv.Sphere(radius=p["radio_radius"]), scale=False, orient=False),
                               scalars="rgb", rgb=True, smooth_shading=True, ambient=0.35, specular=0.4)]
     if on["gcs"] and p.get("shell_on_top"):
@@ -262,7 +301,7 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
             v = sc[inst]["wl"]
             lim = np.nanpercentile(np.abs(v), 98)
             pl.add_mesh(sc[inst], scalars="wl", cmap="gray", clim=(-lim, lim),
-                        nan_opacity=0.0, opacity=p["wl_opacity"], show_scalar_bar=False,
+                        nan_opacity=0.0, opacity=p.get("wl_opacity", op["wl"]), show_scalar_bar=False,
                         lighting=False)
     half, dx, dy = frame
     right = np.cross(up, cam_dir)
@@ -344,6 +383,7 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
         raise ValueError("half must be positive")
     on = dict(ON, **layers)
     p = merge(config(data_root), params)
+    check_opacity(dict(p["opacity"], **({"wl": p["wl_opacity"]} if "wl_opacity" in p else {})))
     out = Path(out) if Path(out).is_absolute() else Path(data_root) / out
     out.parent.mkdir(parents=True, exist_ok=True)
     sc = reconstruct(p, on, data_root)
