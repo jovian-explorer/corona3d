@@ -73,13 +73,14 @@ def fit_step(h, cfg, a, flare, views, log):
     for fixed in modes:
         name = "fixed direction" if fixed else "free"
         try:
-            out = gcs.fit(wl, t_ref, t_out, flare, views, fixed, None, None, None, a.height_out, a.height_note)
+            out = gcs.fit(wl, t_ref, t_out, flare, views, fixed, None, None, None, a.height_out, a.height_note,
+                          drop_poor_views=getattr(a, "drop_poor_views", True), iou_min=a.iou_min)
         except (SystemExit, Exception) as e:                     # SystemExit: the fit found no envelope or front
             attempts.append(dict(mode=name, status="failed", why=[str(e) or type(e).__name__]))
             log(f"gcs: {name} fit failed ({attempts[-1]['why'][0]})")
             continue
         why = gcs.quality(out, flare, fixed, a.iou_min)
-        attempts.append(dict(mode=name, status="poor" if why else "good", why=why))
+        attempts.append(dict(mode=name, status="poor" if why else "good", why=why, view_check=out.get("view_check")))
         log(f"gcs: {name} fit {'poor: ' + '; '.join(why) if why else 'accepted'}")
         if accepted is None or not why or fixed:                  # the fixed fit replaces a poor free fit
             accepted = (out, fixed)
@@ -310,6 +311,7 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
     if fit.get("attempts"):
         for t in fit["attempts"]:
             L.append(f"- {t['mode']} fit: {t['status']}" + (f" ({'; '.join(t['why'])})" if t["why"] else "") + ".")
+            L += [f"  - {x}" for x in gcs.view_lines(t.get("view_check"))]
         if g.get("iou"):
             L.append(f"- Intersection over union of the accepted shell with the envelope, per view at {g['t_ref']}: "
                      + ", ".join(f"{k} {v:g}" for k, v in g["iou"].items())

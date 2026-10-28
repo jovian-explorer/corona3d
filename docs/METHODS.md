@@ -116,11 +116,24 @@ In the second step (at the time `--t-out`, the time of the reconstruction), the 
 
 For the event of 2013 October 25 this gives, at 15:24 UT, an apex height of 5.538 R⊙, $\kappa$ = 0.396, $\alpha$ = 23.46°, a direction of Stonyhurst longitude −53.262° and latitude 3.146°, and a tilt of −56.654° in the PyThea convention, with IoU values of 0.76 (C2), 0.85 (COR1-A), and 0.74 (COR1-B). The front in COR1-B (projection factor 1.00) lies at 2.646, 3.192, and 3.542 R⊙ at 15:08:21, 15:13:21, and 15:18:21 UT, and a straight line through these points gives a speed of 1039 km s⁻¹ and an apex height at 15:00 UT of 1.931 ± 0.158 R⊙. The fitted values are kept in `scripts/gcs_fit_2013-10-25.json`.
 
-### 7.3 Quality criteria
+The base frame is the earliest frame of each observing programme that the folder holds, so that the envelope areas, and with them the height-time points, depend on how early the download starts. For the COR1-B frames of 2013 October 25, the folder used for `scripts/gcs_fit_2013-10-25.json` starts at 14:43 UT and gives an envelope of 2.66 R⊙² at 15:08:21, whereas a folder that starts at 14:35 UT (the window of `corona3d fetch`) gives 2.16 R⊙²; the same code, applied to both folders, reproduces both values. The change of the base frame by eight minutes alters the front height at that frame by 0.03 R⊙; with the different run of frames that results (four frames from 15:08 instead of three), the extrapolated apex height at 15:00 UT is 1.80 R⊙ at 1126 km s⁻¹ instead of 1.93 R⊙ at 1039 km s⁻¹, which agrees within the uncertainty of 0.16 R⊙. Where the result must not depend on the download window, `--running-diff` removes the dependence on the first frame.
+
+### 7.3 Views that disagree with the others
+
+A single instrument with a poor envelope can pull the fit away from the others, as for 2024 May 9, where the fit to COR1-A and COR2-A gave IoU values of 0.548 and 0.295. After the first fit, `corona3d gcs` and `corona3d event` therefore apply the following rule (`gcs.check_views`), which is active by default and is switched off with `--keep-all-views`.
+
+1. A view is poor when its IoU is below 0.5 (`--iou-min` in `corona3d event`) and below 0.75 times the mean IoU of the other views. Of several poor views the one with the lowest IoU is taken, and a single view is never poor, since there is nothing to compare it with.
+2. The six (or four) parameters are fitted again without that view.
+3. The refit is kept only when the mean IoU over the remaining views rises by at least 0.05 compared with the fit to all views evaluated on the same views. Otherwise the poor view did not bias the shell, the fit to all views is kept, and the refit is only reported.
+4. When the refit is kept, the rule is applied again to the remaining views, so that views are removed one at a time, the worst first. The number of views never falls below one.
+
+Both fits are written to the key `view_check` of `gcs_fit.json` (the instruments, the IoU of each, the mean, and whether the refit was kept) and to the section *Fit quality* of `event_report.md`, and the instruments left out are listed in `views_dropped` of the record `gcs_fit` of `config.json`. The IoU and the quality criteria of Section 7.4 then refer to the views that were kept, and the front of the height-time step is chosen among them. The limits of the rule are that the thresholds are conventions and not statistics, that a fit to one view leaves the direction and the extent along the line of sight poorly constrained (a fixed-direction fit is more reliable then), and that the criterion tests only the agreement of the shell with the envelopes, not whether the dropped envelope was the correct one.
+
+### 7.4 Quality criteria
 
 A fit is judged poor, by `gcs.quality`, when the mean IoU over the instruments is below `--iou-min` (default 0.5), when no instrument gave an envelope, or when a fitted parameter lies within 0.5 % of its range from a bound of the optimisation. `corona3d event` uses these criteria to decide whether the fixed-direction fit replaces the free one, and the report states both outcomes.
 
-### 7.4 Shells that are drawn
+### 7.5 Shells that are drawn
 
 The shell at the time of the reconstruction (layer `gcs`, key `gcs`) is drawn when no coronagraph image is shown. When an image is shown, the shell at the time of the images (key `gcs_wl`) is drawn instead, so that the shell and the images belong to the same time, and each panel states the time of its shell. The extrapolation of the height is based on a few frames and assumes a constant speed. Since an accelerating CME moves more slowly early in its rise, the true height at the earlier time may lie below the extrapolated value.
 
@@ -166,7 +179,7 @@ The image is drawn on the plane through Sun centre perpendicular to the line of 
 
 ## 10. From a time to a reconstruction
 
-For an event given only by its time and flare position, `corona3d event` runs the steps in the order of the earlier sections: it writes the configuration (observers, model run, and image windows, Section 2 and 6), downloads the data, chooses the radio interval (Section 8.1), fits the shell (Section 7.2), and draws the figures. The free fit comes first, and the fit with the direction held at the flare site follows when the free fit fails or is judged poor (Section 7.3). A halo CME, a data gap, or a small angular separation between Earth and the STEREO spacecraft limits the free fit, and [LIMITATIONS.md](LIMITATIONS.md) describes these cases. The file `event_report.md` separates what was measured from what was assumed, lists the missing data, and states the fit quality.
+For an event given only by its time and flare position, `corona3d event` runs the steps in the order of the earlier sections: it writes the configuration (observers, model run, and image windows, Section 2 and 6), downloads the data, chooses the radio interval (Section 8.1), fits the shell (Section 7.2), and draws the figures. The free fit comes first, and the fit with the direction held at the flare site follows when the free fit fails or is judged poor (Section 7.4). A halo CME, a data gap, or a small angular separation between Earth and the STEREO spacecraft limits the free fit, and [LIMITATIONS.md](LIMITATIONS.md) describes these cases. The file `event_report.md` separates what was measured from what was assumed, lists the missing data, and states the fit quality.
 
 ## 11. Validation
 

@@ -62,6 +62,8 @@ def whitelight(h, cfg, cor1a=False):
         r = Fido.search(t, *q)
         print(r)
         res = Fido.fetch(r, path=str(d / "{file}"), max_conn=4, progress=False)
+        for e in res.errors:
+            print(f"download failed: {e}")
         failed += len(res.errors)
     bad = [f for f in d.glob("*.fts") if not _readable(f)]
     for f in bad:

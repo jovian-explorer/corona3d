@@ -63,7 +63,7 @@ def world(tmp_path, monkeypatch):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"png")
 
-    def fit(*a):
+    def fit(*a, **kw):
         calls.append("fit")
         fits.append(a)
         return fit_results.pop(0) if fit_results else result()
@@ -150,7 +150,7 @@ def test_fit_at_a_bound_falls_back_and_a_good_fit_does_not(world):
 
 
 def test_failed_free_fit_falls_back(world, monkeypatch):
-    def fit(*a):
+    def fit(*a, **kw):
         world.fits.append(a)
         if not a[5]:
             raise SystemExit("no CME envelope")
@@ -169,7 +169,7 @@ def test_fit_skip_fixed_and_a_height_given_by_hand(world):
 
 
 def test_when_every_fit_fails_the_shell_is_assumed_and_the_exit_code_is_one(world, monkeypatch):
-    def fit(*a):
+    def fit(*a, **kw):
         raise SystemExit("fewer than two usable fronts")
     monkeypatch.setattr(gcs, "fit", fit)
     code, _ = run(world)

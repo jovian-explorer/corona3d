@@ -164,3 +164,15 @@ def test_legacy_stereo_view_names_are_accepted(tmp_path, monkeypatch):
     assert seen["views"][2]["from"] == "stereo" and "sc" not in seen["views"][2]
     with pytest.raises(SystemExit, match="STEREO-B"):
         main(["--home", str(tmp_path), "render", "--view", "c=stereo_a"])
+
+
+def test_fetch_failure_exits_with_a_message_that_names_the_parts_and_the_remedy(tmp_path, monkeypatch):
+    from corona3d import fetch
+    main(["--home", str(tmp_path), "init"])
+    monkeypatch.setattr(fetch, "model", lambda h, cfg: 0)
+    monkeypatch.setattr(fetch, "whitelight", lambda h, cfg, cor1a=False: 3)
+    monkeypatch.setattr(fetch, "ovro_lwa", lambda h, cfg: 0)
+    monkeypatch.setattr(fetch, "nrh", lambda h, cfg: 0)
+    with pytest.raises(SystemExit) as e:
+        main(["--home", str(tmp_path), "fetch"])
+    assert "3 files failed" in str(e.value) and "white light 3" in str(e.value) and "same command again" in str(e.value)

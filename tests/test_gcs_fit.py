@@ -84,7 +84,7 @@ def test_assumed_height_is_recorded_as_assumed_with_its_note(tmp_path, monkeypat
     main(["--home", str(tmp_path), "init"])
     seen = {}
 
-    def fit(*args):
+    def fit(*args, **kw):
         seen["args"] = args
         d = json.loads(FIT_JSON.read_text())
         d["t_out"]["height"] = args[-2]
@@ -123,3 +123,122 @@ def test_gcs_t_ref_sets_wl_time_and_the_provenance(tmp_path, monkeypatch):
     assert cfg["gcs_fit"]["wl_time"] == "2013-10-25T15:30" and cfg["gcs_fit"]["wl_time_from"] == "--t-ref"
     main(["--home", str(tmp_path), "gcs"])                          # no --t-ref: wl_time stays as it is
     assert json.loads((tmp_path / "config.json").read_text())["wl_time"] == "2013-10-25T15:30"
+
+
+# ---- poor views: refit without a view whose IoU is far below the others (synthetic masks) ----
+
+class DiscView:
+    """A view whose envelope is a disc of a 100 x 100 px frame; the 'shell' q = (x, r) is a disc, and the IoU is
+    the intersection over union of the two masks."""
+    yy, xx = np.mgrid[:100, :100]
+
+    def __init__(self, x, r):
+        self.mask = self.disc(x, r)
+
+    @classmethod
+    def disc(cls, x, r):
+        return (cls.xx - x) ** 2 + (cls.yy - 50) ** 2 < r ** 2
+
+    def iou(self, q):
+        s = self.disc(*q)
+        return float((s & self.mask).sum() / max((s | self.mask).sum(), 1))
+
+
+def disc_world(*specs):
+    """{name: (time, view)} for discs (name, x, r), and the solve and score functions of a fit of (x, r)."""
+    from scipy.optimize import differential_evolution
+    vs = {n: (None, DiscView(x, r)) for n, x, r in specs}
+
+    def score(views, q):
+        return {k: v.iou(q) for k, (_, v) in views.items()}
+
+    def solve(views):
+        cost = lambda q: 1.0 - np.mean(list(score(views, q).values()))
+        return list(differential_evolution(cost, [(5, 95), (3, 40)], popsize=15, maxiter=60, seed=1, polish=True).x)
+    return vs, solve, score
+
+
+def test_poor_view_is_the_lowest_iou_below_the_limit_and_below_a_fraction_of_the_others():
+    assert G.poor_view(dict(cor1a=0.548, cor2a=0.295)) == "cor2a"        # May 9 2024
+    assert G.poor_view(dict(c2=0.8, cor1a=0.85, cor1b=0.727)) is None    # a good fit
+    assert G.poor_view(dict(a=0.45, b=0.46)) is None                     # both low, none far below the other
+    assert G.poor_view(dict(a=0.55, b=0.2)) == "b"
+    assert G.poor_view(dict(a=0.05, b=0.2, c=0.9)) == "a"                # the lowest of two poor ones
+    assert G.poor_view(dict(a=0.1)) is None                              # a single view is never poor
+
+
+def test_a_view_that_pulls_the_fit_is_dropped_and_both_fits_are_recorded():
+    """May 9 2024 numbers (cor1a 0.548, cor2a 0.295 in the fit to both; cor1a alone 0.88)."""
+    vs = {"cor1a": (None, None), "cor2a": (None, None)}
+    ious = {("cor1a", "cor2a"): dict(cor1a=0.548, cor2a=0.295), ("cor1a",): dict(cor1a=0.88)}
+    solve = lambda views: tuple(views)
+    score = lambda views, q: ious[q]
+    views, q2, iou2, rec = G.check_views(vs, tuple(vs), ious[tuple(vs)], solve, score)
+    assert list(views) == ["cor1a"] and rec["kept"] == "refit" and rec["dropped"] == ["cor2a"] and q2 == ("cor1a",)
+    assert rec["full"]["views"] == ["cor1a", "cor2a"] and rec["full"]["iou"]["cor2a"] == 0.295
+    r = rec["refits"][0]
+    assert r["kept"] and r["views"] == ["cor1a"] and r["mean_iou"] == 0.88 and r["mean_iou_before"] == 0.548
+    text = " ".join(G.view_lines(rec))
+    assert "Fit to all views (cor1a, cor2a)" in text and "Refit without cor2a" in text and "kept." in text
+
+
+def test_a_poor_disc_view_is_flagged_from_its_synthetic_mask():
+    vs, solve, score = disc_world(("a", 30, 10), ("b", 34, 10), ("c", 45, 10))
+    q = solve(vs)
+    assert G.poor_view(score(vs, q)) == "c"
+
+
+def test_a_refit_that_gains_less_than_the_limit_is_not_kept():
+    """The poor view does not pull the fit (two consistent discs and a small one inside them): the fit to all views is kept."""
+    vs, solve, score = disc_world(("a", 50, 20), ("b", 50, 20), ("c", 50, 5))
+    q = solve(vs)
+    views, q2, iou2, rec = G.check_views(vs, q, score(vs, q), solve, score)
+    assert list(views) == ["a", "b", "c"] and rec["kept"] == "full" and rec["dropped"] == []
+    assert len(rec["refits"]) == 1 and not rec["refits"][0]["kept"]
+    assert q2 == q and "not kept" in " ".join(G.view_lines(rec))
+
+
+def test_keep_all_views_fits_nothing_again_and_good_fits_are_left_alone():
+    vs, solve, score = disc_world(("a", 30, 10), ("b", 34, 10), ("c", 45, 10))
+    q = solve(vs)
+    calls = []
+    counting = lambda v: calls.append(1) or solve(v)
+    _, _, _, rec = G.check_views(vs, q, score(vs, q), counting, score, drop=False)
+    assert calls == [] and rec["kept"] == "full" and not rec["enabled"]
+    assert "--keep-all-views" in " ".join(G.view_lines(rec))
+    good, solve, score = disc_world(("a", 50, 20), ("b", 52, 20))
+    q = solve(good)
+    _, _, _, rec = G.check_views(good, q, score(good, q), counting, score)
+    assert calls == [] and rec["refits"] == [] and "No view was poor" in " ".join(G.view_lines(rec))
+
+
+def test_drops_stop_at_one_view_and_follow_the_worst_first():
+    names = ["a", "b", "c"]
+    vs = {n: (None, None) for n in names}
+    ious = {("a", "b", "c"): dict(a=0.9, b=0.2, c=0.05), ("a", "b"): dict(a=0.9, b=0.2), ("a",): dict(a=0.95)}
+    solve = lambda views: tuple(views)
+    score = lambda views, q: ious[q]
+    full = ious[("a", "b", "c")]
+    views, q, iou, rec = G.check_views(vs, tuple(vs), full, solve, score, improve=0.0)
+    assert list(views) == ["a"] and rec["dropped"] == ["c", "b"]            # the worst first; one view stays
+    assert [r["dropped"] for r in rec["refits"]] == ["c", "b"]
+
+
+def test_the_command_records_dropped_views_in_config_and_gcs_fit_json(tmp_path, monkeypatch):
+    main(["--home", str(tmp_path), "init"])
+    seen = {}
+
+    def fit(*args, **kw):
+        seen.update(kw)
+        d = json.loads(FIT_JSON.read_text()) if FIT_JSON.exists() else None
+        d["view_check"] = dict(dropped=["cor1a"], kept="refit", enabled=True, refits=[], full={})
+        d["t_ref"]["iou"] = dict(c2=0.8, cor1b=0.7)
+        return d
+    monkeypatch.setattr(G, "fit", fit)
+    main(["--home", str(tmp_path), "gcs", "--views", "c2,cor1a,cor1b"])
+    assert seen["drop_poor_views"] is True                                  # the default
+    rec = json.loads((tmp_path / "config.json").read_text())["gcs_fit"]
+    assert rec["views"] == ["c2", "cor1b"] and rec["views_dropped"] == ["cor1a"]
+    assert json.loads((tmp_path / "gcs_fit.json").read_text())["view_check"]["dropped"] == ["cor1a"]
+    main(["--home", str(tmp_path), "gcs", "--keep-all-views"])
+    assert seen["drop_poor_views"] is False

@@ -36,6 +36,67 @@ VIEWS = ("c2", "cor1a", "cor1b")
 KEYS = ["height", "kappa", "alpha_deg", "lon_stonyhurst", "lat_deg", "tilt_pythea_deg"]
 
 IOU_MIN = 0.5                                          # mean IoU below which a fit counts as poor (`corona3d event`)
+POOR_RATIO = 0.75                                      # a view is poor below this fraction of the mean IoU of the others
+IMPROVE_MIN = 0.05                                     # a refit without a view must raise the mean IoU of the kept views by this
+
+
+def poor_view(iou, iou_min=IOU_MIN, ratio=POOR_RATIO):
+    """Name of the view of {view: IoU} that is poor, or None. A view is poor when its IoU is below
+    iou_min and below ratio times the mean IoU of the other views; of several, the lowest. A single
+    view is never poor (nothing to compare with)."""
+    bad = {k: v for k, v in iou.items() if len(iou) > 1 and v < iou_min
+           and v < ratio * np.mean([w for j, w in iou.items() if j != k])}
+    return min(bad, key=bad.get) if bad else None
+
+
+def check_views(views, q, iou, solve, score, iou_min=IOU_MIN, ratio=POOR_RATIO, improve=IMPROVE_MIN, drop=True):
+    """Refit without the poor views. `views` is {name: view}, `q` the parameters of the fit to all of
+    them, `iou` {name: IoU} of that fit; solve(views) returns the parameters of a fit to the given
+    views and score(views, q) their {name: IoU}.
+
+    Rule (documented in docs/METHODS.md): while more than one view remains and poor_view() names a
+    view, the fit is repeated without it, and the refit replaces the previous fit only when the mean
+    IoU over the remaining views rises by at least `improve` compared with the previous fit on the
+    same views; otherwise the previous fit is kept and the search ends. The number of views never
+    falls below one. Returns (views, q, iou, record); the record lists the full fit and every refit."""
+    rec = dict(rule=f"drop the view with IoU below {iou_min:g} and below {ratio:g} of the mean of the others, "
+                    f"keep the refit if the mean IoU of the kept views rises by {improve:g} or more; at least one view stays",
+               enabled=bool(drop), full=dict(views=list(views), iou=dict(iou), mean_iou=round(float(np.mean(list(iou.values()))), 3)),
+               refits=[], dropped=[], kept="full")
+    while drop and len(views) > 1:
+        bad = poor_view(iou, iou_min, ratio)
+        if bad is None:
+            break
+        rest = {k: v for k, v in views.items() if k != bad}
+        q2 = solve(rest)
+        iou2 = score(rest, q2)
+        before = float(np.mean([iou[k] for k in rest]))
+        after = float(np.mean(list(iou2.values())))
+        ok = after - before >= improve
+        rec["refits"].append(dict(dropped=bad, views=list(rest), iou=dict(iou2), mean_iou=round(after, 3),
+                                  mean_iou_before=round(before, 3), kept=bool(ok)))
+        if not ok:
+            break
+        views, q, iou = rest, q2, iou2
+        rec["dropped"].append(bad)
+        rec["kept"] = "refit"
+    return views, q, iou, rec
+
+
+def view_lines(rec):
+    """Text lines describing a view check record (for event_report.md and the command line)."""
+    if not rec:
+        return []
+    f = rec["full"]
+    L = [f"Fit to all views ({', '.join(f['views'])}): IoU " + ", ".join(f"{k} {v:g}" for k, v in f["iou"].items())
+         + f", mean {f['mean_iou']:g}."]
+    for r in rec["refits"]:
+        L.append(f"Refit without {r['dropped']} ({', '.join(r['views'])}): IoU " + ", ".join(f"{k} {v:g}" for k, v in r["iou"].items())
+                 + f", mean {r['mean_iou']:g} against {r['mean_iou_before']:g} for the same views in the fit to all; "
+                 + ("kept." if r["kept"] else "not kept (the rise is below the required gain)."))
+    if not rec["refits"]:
+        L.append("No view was poor." if rec["enabled"] else "Views were kept as given (--keep-all-views).")
+    return L
 
 
 def bounds(flare, fix_direction=False):
@@ -252,11 +313,13 @@ def extrapolate(times, heights, t0):
 
 
 def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=None, previous=None,
-        running=None, height_out=None, height_note=None):
+        running=None, height_out=None, height_note=None, drop_poor_views=True, iou_min=IOU_MIN):
     """Two-step fit of a CME from the images in the folder wl; returns the result dictionary
     (keys t_ref, t_out, height_time, fit). `previous` is an earlier result whose step 1 is reused,
     `running` the minutes of a running difference (default: difference from the first frame), and
-    `height_out` an apex height at t_out given by hand (with `height_note`) in place of step 2."""
+    `height_out` an apex height at t_out given by hand (with `height_note`) in place of step 2.
+    With `drop_poor_views` a view whose IoU is far below the others is left out and the fit repeated
+    (see check_views); the result then has the key `view_check` with both fits."""
     _load()
     flare = tuple(flare)
     fr = {k: frames_of(wl, k) for k in keys}
@@ -264,19 +327,33 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     print("bases:", {f"{k}/{s}": m.date.isot[:19] for (k, s), m in base.items()})
 
     tr = datetime.fromisoformat(t_ref)
+    allkeys = tuple(keys)
     if previous:
         q24 = [previous["t_ref"][k] for k in KEYS]
+        used = tuple(k for k in keys if k in (previous["t_ref"].get("iou") or {})) or tuple(keys)
+        V = views_at(fr, base, tr, used, flare, running)
+        rec = None
     else:
         V = views_at(fr, base, tr, keys, flare, running)
         if not V:
             raise SystemExit(f"no CME envelope in any of {keys} within 6 min of {t_ref}; check the times and --flare")
         full = (lambda q: [q[0], q[1], q[2], flare[0], flare[1], q[3]]) if fix_direction else list
-        cost = lambda q: 1.0 if q[1] >= 0.95 else 1.0 - np.mean([v.iou(shell(full(q), t_ref)) for _, v in V.values()])
-        q24 = full(list(differential_evolution(cost, bounds(flare, fix_direction), popsize=12, maxiter=60, tol=1e-4, seed=3,
-                                               polish=True).x))
-    V = views_at(fr, base, tr, keys, flare, running)
+
+        def solve(vs):
+            cost = lambda q: 1.0 if q[1] >= 0.95 else 1.0 - np.mean([v.iou(shell(full(q), t_ref)) for _, v in vs.values()])
+            return full(list(differential_evolution(cost, bounds(flare, fix_direction), popsize=12, maxiter=60, tol=1e-4,
+                                                    seed=3, polish=True).x))
+
+        score = lambda vs, q: {k: float(v.iou(shell(q, t_ref))) for k, (_, v) in vs.items()}
+        q24 = solve(V)
+        V, q24, _, rec = check_views(V, q24, score(V, q24), solve, score, iou_min, drop=drop_poor_views)
+        for line in view_lines(rec):
+            print("views:", line)
+    keys = tuple(V)
     out = {"t_ref": dict(zip(KEYS, [round(float(v), 3) for v in q24]), time=t_ref,
                          iou={k: round(float(v.iou(shell(q24, t_ref))), 3) for k, (_, v) in V.items()})}
+    if rec:
+        out["view_check"] = rec
     print("step 1:", out["t_ref"])
     if height_out is not None:                           # step 2 replaced by an assumed height
         out["fit"] = dict(height_t_out=float(height_out), assumed=True, note=height_note or "")
@@ -287,10 +364,10 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     # step 2: leading edge of the CME, in the instrument whose line of sight is most nearly
     # perpendicular to the fitted CME direction (the limb view), deprojected with that direction
     proj = {}
-    for k in keys:
+    for k in allkeys:
         o = next(m for (kk, _), m in base.items() if kk == k).observer_coordinate
         proj[k] = projection_factor(q24[3], q24[4], o.transform_to(frames.HeliographicStonyhurst).cartesian.xyz.value)
-    k = front or max(proj, key=proj.get)
+    k = front or max(keys, key=proj.get)           # the limb view among the views kept in the fit
     print(f"front measured in {k} (projection factor {proj[k]:.2f})")
     rows = []
     for tf, files in fr[k]:
@@ -331,10 +408,13 @@ def config_update(out, flare, keys, fix_direction=False, running=None):
         s = {k: d[k] for k in ("height", "kappa", "alpha_deg", "lon_stonyhurst", "lat_deg")}
         s["tilt_deg"] = round(d["tilt_pythea_deg"] - 90.0, 3)
         return dict(time=d["time"], **s) if with_time else s
-    rec = {"t_ref": out["t_ref"]["time"], "t_out": out["t_out"]["time"], "views": list(keys),
+    dropped = (out.get("view_check") or {}).get("dropped", [])
+    rec = {"t_ref": out["t_ref"]["time"], "t_out": out["t_out"]["time"], "views": [k for k in keys if k not in dropped],
            "iou": out["t_ref"]["iou"], "flare": list(flare), "running_diff_min": running,
            "fixed": ["lon_stonyhurst", "lat_deg"] if fix_direction else [],
            "height_t_out": out["fit"]["height_t_out"]}
+    if dropped:
+        rec["views_dropped"] = list(dropped)
     if out["fit"].get("assumed"):
         rec.update(height_source="assumed", height_note=out["fit"]["note"])
     else:
@@ -358,7 +438,8 @@ def run(home, cfg, a):
     out_file = Path(home) / "gcs_fit.json"
     previous = json.loads(out_file.read_text(encoding="utf-8")) if a.skip_step1 else None
     out = fit(a.wl or wl_dir(home), t_ref, t_out, flare, keys, a.fix_direction, a.front, previous,
-              a.running_diff, a.height_out, a.height_note)
+              a.running_diff, a.height_out, a.height_note,
+              drop_poor_views=getattr(a, "drop_poor_views", True))
     write_result(home, out, flare, keys, a.fix_direction, a.running_diff)
     if a.t_ref:
         set_wl_time(home, a.t_ref)

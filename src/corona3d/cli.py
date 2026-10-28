@@ -62,12 +62,19 @@ def main(argv=None):
     g.add_argument("--height-out", type=float, metavar="R_SUN",
                    help="apex height at --t-out given by hand; step 2 is skipped and the height is recorded as assumed")
     g.add_argument("--height-note", help="reason for --height-out, written into the provenance record")
+    g.add_argument("--drop-poor-views", dest="drop_poor_views", action="store_true", default=True,
+                    help="refit without a view whose IoU is far below the others and keep the refit when it is better "
+                         "(default; rule in docs/METHODS.md)")
+    g.add_argument("--keep-all-views", dest="drop_poor_views", action="store_false", help="fit all views as given")
     g.add_argument("--skip-step1", action="store_true", help="take step 1 from the gcs_fit.json of the working directory")
     ev = sub.add_parser("event", help="new, fetch, radio-interval, gcs, and render for an event, with a report",
                         description="Runs every step for one event in the working directory and writes event_report.md; "
                                     "steps already done are skipped.")
     ev.add_argument("--home", default=argparse.SUPPRESS, help="working directory (same as the option before the command)")
-    ev.add_argument("--time", required=True, help="time of the reconstruction, e.g. 2024-05-09T17:32")
+    ev.add_argument("--time", required=True, help="time of the reconstruction, e.g. 2024-05-09T17:32; with only a date "
+                    "(2024-05-09) the type II and III bursts of that day are listed from the SWPC event list")
+    ev.add_argument("--burst", type=int, metavar="N",
+                    help="with a date as --time: use the begin time of burst number N of the list")
     ev.add_argument("--flare", required=True, help="flare position, e.g. S14W28")
     ev.add_argument("--fit", choices=("auto", "fixed", "skip"), default="auto",
                     help="auto: free GCS fit, then the fixed-direction fit when it fails or is poor; "
@@ -78,6 +85,10 @@ def main(argv=None):
     ev.add_argument("--height-note", help="reason for --height-out (required with it)")
     ev.add_argument("--views", type=gcs_views, help="instruments of the fit (default: c2, cor1 and cor2 of the STEREO spacecraft)")
     ev.add_argument("--t-ref", help="time of the six-parameter fit (default: the gcs_wl time of config.json)")
+    ev.add_argument("--drop-poor-views", dest="drop_poor_views", action="store_true", default=True,
+                    help="refit without a view whose IoU is far below the others and keep the refit when it is better "
+                         "(default; rule in docs/METHODS.md)")
+    ev.add_argument("--keep-all-views", dest="drop_poor_views", action="store_false", help="fit all views as given")
     ev.add_argument("--radio-search", type=float, default=10.0, metavar="MINUTES",
                     help="radio images are searched within MINUTES of --time (default 10)")
     ev.add_argument("--force", action="store_true", help="repeat the downloads, the fit, and the figures")
@@ -130,7 +141,18 @@ def main(argv=None):
               "next: corona3d fetch, then fit the shell with corona3d gcs")
         return
     if a.cmd == "event":
-        from . import pipeline
+        from . import bursts, pipeline
+        if bursts.is_date(a.time):
+            try:
+                t = bursts.choose(a.time.strip(), a.burst, paths.home(a.home, must_exist=False))
+            except RuntimeError as e:
+                sys.exit(str(e))
+            if t is None:
+                return
+            a.time = t
+            print(f"--burst {a.burst}: time {t}")
+        elif a.burst is not None:
+            sys.exit("--burst needs a date without a time as --time, e.g. --time 2024-05-09")
         if a.height_out is not None and not a.height_note:
             sys.exit("--height-out needs --height-note, the reason for the assumed height")
         sys.exit(pipeline.run(paths.home(a.home, must_exist=False), a))
@@ -141,18 +163,22 @@ def main(argv=None):
         radio.run(h, cfg, a)
         return
     if a.cmd == "fetch":
-        failed = 0
+        failed, parts = 0, {}
         everything = not (a.model or a.wl or a.ovro_lwa or a.nrh)
         if a.model or everything:
-            failed += fetch.model(h, cfg)
+            parts["model"] = fetch.model(h, cfg)
         if a.wl or everything:
-            failed += fetch.whitelight(h, cfg, cor1a=a.cor1a)
+            parts["white light"] = fetch.whitelight(h, cfg, cor1a=a.cor1a)
         if a.ovro_lwa or everything:
-            failed += fetch.ovro_lwa(h, cfg)
+            parts["OVRO-LWA"] = fetch.ovro_lwa(h, cfg)
         if a.nrh or everything:
             fetch.nrh(h, cfg)                  # a report only: no automatic download exists
+        failed = sum(parts.values())
         if failed:
-            sys.exit(1)
+            sys.exit(f"corona3d fetch: {failed} files failed or were damaged ("
+                     + ", ".join(f"{k} {n}" for k, n in parts.items() if n)
+                     + "), usually a transient server or network error; complete files are kept, so give the same "
+                       "command again")
         return
     if a.cmd == "gcs":
         from . import gcs
