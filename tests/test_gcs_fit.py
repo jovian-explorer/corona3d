@@ -188,14 +188,24 @@ def test_a_poor_disc_view_is_flagged_from_its_synthetic_mask():
     assert G.poor_view(score(vs, q)) == "c"
 
 
-def test_a_refit_that_gains_less_than_the_limit_is_not_kept():
-    """The poor view does not pull the fit (two consistent discs and a small one inside them): the fit to all views is kept."""
-    vs, solve, score = disc_world(("a", 50, 20), ("b", 50, 20), ("c", 50, 5))
-    q = solve(vs)
-    views, q2, iou2, rec = G.check_views(vs, q, score(vs, q), solve, score)
-    assert list(views) == ["a", "b", "c"] and rec["kept"] == "full" and rec["dropped"] == []
-    assert len(rec["refits"]) == 1 and not rec["refits"][0]["kept"]
-    assert q2 == q and "not kept" in " ".join(G.view_lines(rec))
+def test_a_poor_view_that_costs_the_others_nothing_is_still_dropped():
+    """May 9 2024, free fit: cor1a 0.9009 and cor2a 0 in the fit to both, cor1a 0.9017 alone. The gain is 0.001,
+    but the view cannot be matched by the shell, so the refit is kept and the mean IoU is 0.90, not 0.45."""
+    vs = {"cor1a": (None, None), "cor2a": (None, None)}
+    ious = {("cor1a", "cor2a"): dict(cor1a=0.9009, cor2a=0.0), ("cor1a",): dict(cor1a=0.9017)}
+    views, q, iou, rec = G.check_views(vs, tuple(vs), ious[tuple(vs)], lambda v: tuple(v), lambda v, q: ious[q])
+    assert list(views) == ["cor1a"] and rec["dropped"] == ["cor2a"] and rec["kept"] == "refit"
+    assert rec["refits"][0]["mean_iou"] == 0.902 and rec["full"]["mean_iou"] == 0.45
+    assert G.quality(dict(t_ref=dict(iou=iou, height=5.4, kappa=0.4, alpha_deg=25.0, lon_stonyhurst=36.0,
+                                     lat_deg=3.0, tilt_pythea_deg=-30.0)), (28.0, -14.0)) == []
+
+
+def test_a_refit_that_makes_the_kept_views_worse_is_not_kept():
+    vs = {"a": (None, None), "b": (None, None)}
+    ious = {("a", "b"): dict(a=0.60, b=0.10), ("a",): dict(a=0.45)}        # the others lose 0.15 without the view
+    views, q, iou, rec = G.check_views(vs, tuple(vs), ious[tuple(vs)], lambda v: tuple(v), lambda v, q: ious[q])
+    assert list(views) == ["a", "b"] and rec["kept"] == "full" and not rec["refits"][0]["kept"]
+    assert "not kept" in " ".join(G.view_lines(rec))
 
 
 def test_keep_all_views_fits_nothing_again_and_good_fits_are_left_alone():
@@ -222,6 +232,20 @@ def test_drops_stop_at_one_view_and_follow_the_worst_first():
     views, q, iou, rec = G.check_views(vs, tuple(vs), full, solve, score, improve=0.0)
     assert list(views) == ["a"] and rec["dropped"] == ["c", "b"]            # the worst first; one view stays
     assert [r["dropped"] for r in rec["refits"]] == ["c", "b"]
+
+
+def test_choose_fit_follows_the_documented_criterion():
+    good, poor = "good", "poor"
+    f = lambda status, m: dict(status=status, mean_iou=m)
+    assert G.choose_fit(f(good, 0.90), None) == "free"                                    # May 9 free fit, cor1a only
+    assert G.choose_fit(f(poor, 0.45), f(good, 0.80)) == "fixed direction"                # a good fit beats a poor one
+    assert G.choose_fit(f(good, 0.60), f(poor, 0.40)) == "free"
+    assert G.choose_fit(f(poor, 0.45), f(poor, 0.377)) == "free"                          # May 9 with all views kept
+    assert G.choose_fit(f(poor, 0.30), f(poor, 0.45)) == "fixed direction"                # higher mean IoU wins
+    assert G.choose_fit(f(poor, 0.40), f(poor, 0.41)) == "free"                           # a tie goes to the free fit
+    assert G.choose_fit(None, f(poor, 0.2)) == "fixed direction" and G.choose_fit(f(poor, 0.2), None) == "free"
+    assert G.choose_fit(None, None) is None
+    assert G.choose_fit(f(poor, None), f(poor, 0.2)) == "fixed direction"                 # no envelope in the free fit
 
 
 @needs_tree

@@ -140,6 +140,45 @@ def test_poor_free_fit_falls_back_to_the_fixed_direction(world):
     assert "held at the flare site" in text and "cor1b 0.8" in text
 
 
+def may9(iou, views, fixed=False, dropped=()):
+    """A result in the form of the May 9 2024 fits: views kept after the view rule, with their IoU."""
+    r = result(fixed=fixed)
+    r["t_ref"]["iou"] = dict(iou)
+    r["views_used"] = list(views)
+    r["view_check"] = dict(enabled=True, dropped=list(dropped), kept="refit" if dropped else "full", refits=[],
+                           full=dict(views=["cor1a", "cor2a"], iou=dict(cor1a=0.901, cor2a=0.0), mean_iou=0.45))
+    return r
+
+
+def test_free_fit_with_a_dropped_view_is_good_and_the_fixed_fit_is_not_run(world):
+    """May 9 2024: free fit cor1a 0.90 and cor2a 0.0; cor2a is dropped, the free fit is judged on cor1a only."""
+    world.fit_results.append(may9(dict(cor1a=0.902), ["cor1a"], dropped=["cor2a"]))
+    run(world, views="c2,cor1b,cor2b")
+    assert fixed_flags(world) == [False]
+    assert config(world.home)["gcs_fit"]["views"] == ["cor1a"]            # no c2: it had no envelope
+    text = report(world)
+    assert "images of cor1a at" in text and "c2, cor1a" not in text and "views used: cor1a" in text
+    assert "The fixed-direction fit was not run, because the free fit was good." in text
+    assert "Kept: the free fit." in text and "(1) free fit on all views" in text
+    d = json.loads((world.home / "gcs_fit.json").read_text())["decision"]
+    assert d["accepted"] == "free" and d["fixed_run"] is False and len(d["order"]) == 5
+
+
+def test_both_fits_poor_keeps_the_better_one_and_reports_every_step(world):
+    world.fit_results += [may9(dict(cor1a=0.45, cor2a=0.20), ["cor1a", "cor2a"]),
+                          may9(dict(cor1a=0.487, cor2a=0.268), ["cor1a", "cor2a"], fixed=True)]
+    run(world)
+    assert fixed_flags(world) == [False, True]
+    text = report(world)
+    assert "Kept: the fixed direction fit, the better of the two" in text
+    assert "free fit: poor" in text and "fixed direction fit: poor" in text
+    d = json.loads((world.home / "gcs_fit.json").read_text())["decision"]
+    assert d["accepted"] == "fixed direction" and d["fixed_run"] and [x["mode"] for x in d["attempts"]] == ["free", "fixed direction"]
+    world.fit_results += [may9(dict(cor1a=0.30), ["cor1a"]), may9(dict(cor1a=0.31), ["cor1a"], fixed=True)]
+    run(world, force=True)
+    assert "Kept: the free fit, the better of the two" in report(world)       # a tie goes to the free fit
+
+
 def test_fit_at_a_bound_falls_back_and_a_good_fit_does_not(world):
     world.fit_results += [result(kappa=0.8), result(fixed=True)]       # kappa at its upper bound
     run(world)

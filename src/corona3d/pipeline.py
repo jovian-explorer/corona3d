@@ -98,14 +98,17 @@ def _save_state(h, st):
 
 
 def fit_step(h, cfg, a, flare, views, log):
-    """Fit the shell: with fit "auto" the free fit first, and the fixed-direction fit when it fails or
-    is poor (see gcs.quality); with "fixed" only the latter. Writes gcs_fit.json and config.json for
-    the accepted result. Returns the record kept in the state file."""
+    """Fit the shell. With fit "auto": (1) the free fit on all views, (2) the view rule inside that fit
+    (a poor view is left out and the free fit repeated), (3) the quality of the result (gcs.quality),
+    (4) only when it is poor or failed, the fixed-direction fit, also with the view rule, and (5) the
+    better of the two (gcs.choose_fit). With "fixed" only the fixed-direction fit. Writes gcs_fit.json
+    (with the key `decision`) and config.json for the accepted result. Returns the record kept in the
+    state file."""
     wl = paths.wl_dir(h)
     t_ref, t_out = a.t_ref, cfg["time"]              # t_ref None: chosen from the images by gcs.fit
-    modes = [False, True] if a.fit == "auto" else [True]
-    attempts, accepted = [], None
-    for fixed in modes:
+    attempts, results = [], {}
+
+    def attempt(fixed):
         name = "fixed direction" if fixed else "free"
         try:
             out = gcs.fit(wl, t_ref, t_out, flare, views, fixed, None, None, None, a.height_out, a.height_note,
@@ -114,22 +117,36 @@ def fit_step(h, cfg, a, flare, views, log):
         except (SystemExit, Exception) as e:                     # SystemExit: the fit found no envelope or front
             attempts.append(dict(mode=name, status="failed", why=[str(e) or type(e).__name__]))
             log(f"gcs: {name} fit failed ({attempts[-1]['why'][0]})")
-            continue
+            return None
         why = gcs.quality(out, flare, fixed, a.iou_min)
-        attempts.append(dict(mode=name, status="poor" if why else "good", why=why, view_check=out.get("view_check")))
-        log(f"gcs: {name} fit {'poor: ' + '; '.join(why) if why else 'accepted'}")
-        if accepted is None or not why or fixed:                  # the fixed fit replaces a poor free fit
-            accepted = (out, fixed)
-        if not why:
-            break
+        m = gcs.mean_iou(out)
+        attempts.append(dict(mode=name, status="poor" if why else "good", why=why, view_check=out.get("view_check"),
+                             views=out.get("views_used"), dropped=(out.get("view_check") or {}).get("dropped", []),
+                             mean_iou=None if m is None else round(m, 3)))
+        log(f"gcs: {name} fit (views {', '.join(out.get('views_used') or [])}) "
+            f"{'poor: ' + '; '.join(why) if why else 'accepted'}")
+        results[name] = out
+        return attempts[-1]
+
+    free = attempt(False) if a.fit == "auto" else None
+    fixed = attempt(True) if a.fit != "auto" or free is None or free["status"] != "good" else None
+    pick = gcs.choose_fit(free, fixed)
     rec = dict(attempts=attempts, flare=list(flare), views=list(views), t_ref=t_ref, t_out=t_out,
                height_out=a.height_out, iou_min=a.iou_min, accepted=None)
-    if accepted:
-        out, fixed = accepted
-        gcs.write_result(h, out, flare, views, fixed)
-        rec["accepted"] = "fixed direction" if fixed else "free"
+    if pick:
+        out = results[pick]
+        out["decision"] = dict(
+            order=["free fit on all views", "view rule and refit of the free fit", "quality of the free fit",
+                   "fixed-direction fit with the view rule, only if the free fit is poor or failed", "better of the two"],
+            criterion=f"a good fit beats a poor one; otherwise the higher mean IoU of the kept views wins, and a difference "
+                      f"below {gcs.TIE_IOU:g} goes to the free fit",
+            fixed_run=fixed is not None, attempts=[dict(x, view_check=None) for x in attempts], accepted=pick)
+        gcs.write_result(h, out, flare, views, pick == "fixed direction")
+        rec["accepted"] = pick
         rec["t_ref"] = out["t_ref"]["time"]
         rec["t_ref_choice"] = out.get("t_ref_choice") or dict(method="--t-ref")
+        if fixed is None and a.fit == "auto":
+            log("gcs: the free fit is good; the fixed-direction fit was not needed")
     return rec
 
 
@@ -339,8 +356,9 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
             assumed.append(f"The apex height at {g['t_out']} is {g['height_t_out']:g} R_sun, given by hand: {g.get('height_note', '')}")
         if g["fixed"]:
             assumed.append(f"The shell axis is held at the flare site (Stonyhurst longitude {flare[0]:g} deg, latitude "
-                           f"{flare[1]:g} deg), because the free fit "
-                           + ("was not requested." if a.fit == "fixed" else "failed or was poor (see the fit quality below)."))
+                           f"{flare[1]:g} deg), "
+                           + ("because the fixed-direction fit was requested." if a.fit == "fixed" else
+                              "because the free fit was poor or failed and the fixed-direction fit was the better one (see the fit quality below)."))
     else:
         assumed.append("The CME shell is the default one placed above the flare site (aspect ratio 0.4, half-angle 30 deg, "
                        f"height {cfg['gcs']['height']:g} R_sun at the time of the event and {cfg['gcs_wl']['height']:g} R_sun "
@@ -386,9 +404,21 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
                  f"{w['instrument']} frame, so the coronagraph panel shows that frame and not the fit time.")
     L += ["", "## Fit quality", ""]
     if fit.get("attempts"):
+        if a.fit == "auto":
+            L.append("- Order: (1) free fit on all views, (2) view rule and refit of the free fit, (3) quality of the free fit, "
+                     "(4) fixed-direction fit with the view rule only if the free fit is poor or failed, (5) the better of the two.")
         for t in fit["attempts"]:
-            L.append(f"- {t['mode']} fit: {t['status']}" + (f" ({'; '.join(t['why'])})" if t["why"] else "") + ".")
+            used = f"; views used: {', '.join(t['views'])}" if t.get("views") else ""
+            L.append(f"- {t['mode']} fit: {t['status']}" + (f" ({'; '.join(t['why'])})" if t["why"] else "") + used + ".")
             L += [f"  - {x}" for x in gcs.view_lines(t.get("view_check"))]
+        if a.fit == "auto":
+            names = [t["mode"] for t in fit["attempts"]]
+            if "fixed direction" not in names:
+                L.append("- The fixed-direction fit was not run, because the free fit was good.")
+            L.append(f"- Kept: the {fit['accepted']} fit" if fit.get("accepted") else "- Kept: none, no fit succeeded")
+            if fit.get("accepted") and "fixed direction" in names:
+                L[-1] += f", the better of the two (a good fit beats a poor one; otherwise the higher mean IoU of the kept views, a difference below {gcs.TIE_IOU:g} going to the free fit)"
+            L[-1] += "."
         if g.get("iou"):
             L.append(f"- Intersection over union of the accepted shell with the envelope, per view at {g['t_ref']}: "
                      + ", ".join(f"{k} {v:g}" for k, v in g["iou"].items())

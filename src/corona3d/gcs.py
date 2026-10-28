@@ -37,7 +37,8 @@ KEYS = ["height", "kappa", "alpha_deg", "lon_stonyhurst", "lat_deg", "tilt_pythe
 
 IOU_MIN = 0.5                                          # mean IoU below which a fit counts as poor (`corona3d event`)
 POOR_RATIO = 0.75                                      # a view is poor below this fraction of the mean IoU of the others
-IMPROVE_MIN = 0.05                                     # a refit without a view must raise the mean IoU of the kept views by this
+IMPROVE_MIN = -0.01                                    # a refit without a view is kept unless the mean IoU of the kept views falls by more than this
+TIE_IOU = 0.02                                         # two fits whose mean IoU differs by less than this are tied (the free fit wins)
 DEV_AREA = 3.0                                         # R_sun^2: an envelope this large counts as a developed CME (t_ref choice)
 DEV_MARGIN = 0.2                                       # R_sun: ... when its front is this far inside the outer edge of the field
 SCAN_MIN = 150.0                                       # the automatic t_ref is searched up to this many minutes after t_out
@@ -82,12 +83,13 @@ def check_views(views, q, iou, solve, score, iou_min=IOU_MIN, ratio=POOR_RATIO, 
     views and score(views, q) their {name: IoU}.
 
     Rule (documented in docs/METHODS.md): while more than one view remains and poor_view() names a
-    view, the fit is repeated without it, and the refit replaces the previous fit only when the mean
-    IoU over the remaining views rises by at least `improve` compared with the previous fit on the
-    same views; otherwise the previous fit is kept and the search ends. The number of views never
+    view, the fit is repeated without it, and the refit replaces the previous fit unless the mean
+    IoU over the remaining views falls by more than -`improve` compared with the previous fit on the
+    same views (a view that the shell cannot match, such as an IoU of 0, costs the others nothing and
+    only lowers the mean); otherwise the previous fit is kept and the search ends. The number of views never
     falls below one. Returns (views, q, iou, record); the record lists the full fit and every refit."""
     rec = dict(rule=f"drop the view with IoU below {iou_min:g} and below {ratio:g} of the mean of the others, "
-                    f"keep the refit if the mean IoU of the kept views rises by {improve:g} or more; at least one view stays",
+                    f"keep the refit unless the mean IoU of the kept views falls by more than {-improve:g}; at least one view stays",
                enabled=bool(drop), full=dict(views=list(views), iou=dict(iou), mean_iou=round(float(np.mean(list(iou.values()))), 3)),
                refits=[], dropped=[], kept="full")
     while drop and len(views) > 1:
@@ -120,7 +122,7 @@ def view_lines(rec):
     for r in rec["refits"]:
         L.append(f"Refit without {r['dropped']} ({', '.join(r['views'])}): IoU " + ", ".join(f"{k} {v:g}" for k, v in r["iou"].items())
                  + f", mean {r['mean_iou']:g} against {r['mean_iou_before']:g} for the same views in the fit to all; "
-                 + ("kept." if r["kept"] else "not kept (the rise is below the required gain)."))
+                 + ("kept." if r["kept"] else "not kept (the mean IoU of the kept views fell)."))
     if not rec["refits"]:
         L.append("No view was poor." if rec["enabled"] else "Views were kept as given (--keep-all-views).")
     return L
@@ -147,6 +149,29 @@ def quality(out, flare, fix_direction=False, iou_min=IOU_MIN):
         if min(t[n] - lo, hi - t[n]) <= 0.005 * (hi - lo):
             why.append(f"{n} = {t[n]:g} is at its bound ({lo:g} to {hi:g})")
     return why
+
+
+def mean_iou(out):
+    """Mean IoU over the views of a result of fit(), or None when no view had an envelope."""
+    iou = (out.get("t_ref") or {}).get("iou") or {}
+    return float(np.mean(list(iou.values()))) if iou else None
+
+
+def choose_fit(free, fixed, tie=TIE_IOU):
+    """Better of the free and the fixed-direction fit, each a dict(status, mean_iou) with status "good",
+    "poor" or "failed" (or None when the fit was not made). A good fit beats a poor one; between two fits of
+    the same status the higher mean IoU of the kept views wins, and a difference below `tie` goes to the free
+    fit, because the fixed fit is a special case of it. Returns "free", "fixed direction" or None."""
+    ok = lambda f: f is not None and f.get("status") in ("good", "poor")
+    if not ok(free) and not ok(fixed):
+        return None
+    if not ok(fixed):
+        return "free"
+    if not ok(free):
+        return "fixed direction"
+    if free["status"] != fixed["status"]:
+        return "free" if free["status"] == "good" else "fixed direction"
+    return "fixed direction" if (fixed["mean_iou"] or 0.0) - (free["mean_iou"] or 0.0) >= tie else "free"
 
 
 def _load():
@@ -449,7 +474,7 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
         for line in view_lines(rec):
             print("views:", line)
     keys = tuple(V)
-    out = {"base": base_rec,
+    out = {"base": base_rec, "views_used": list(keys),
            "t_ref": dict(zip(KEYS, [round(float(v), 3) for v in q24]), time=t_ref,
                          iou={k: round(float(v.iou(shell(q24, t_ref))), 3) for k, (_, v) in V.items()})}
     if rec:
@@ -513,7 +538,7 @@ def config_update(out, flare, keys, fix_direction=False, running=None):
         s["tilt_deg"] = round(d["tilt_pythea_deg"] - 90.0, 3)
         return dict(time=d["time"], **s) if with_time else s
     dropped = (out.get("view_check") or {}).get("dropped", [])
-    rec = {"t_ref": out["t_ref"]["time"], "t_out": out["t_out"]["time"], "views": [k for k in keys if k not in dropped and k in (out["t_ref"].get("iou") or {k: 1})],
+    rec = {"t_ref": out["t_ref"]["time"], "t_out": out["t_out"]["time"], "views": list(out.get("views_used") or [k for k in keys if k not in dropped and k in (out["t_ref"].get("iou") or {k: 1})]),
            "iou": out["t_ref"]["iou"], "flare": list(flare), "running_diff_min": running,
            "fixed": ["lon_stonyhurst", "lat_deg"] if fix_direction else [],
            "height_t_out": out["fit"]["height_t_out"]}

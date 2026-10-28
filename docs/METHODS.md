@@ -120,9 +120,13 @@ When `--t-ref` is not given, the time of the fit is chosen from the images. For 
 
 The base frame is fixed by a pre-event window and not by the start of the download. For each instrument and observing programme, the base is the last frame at or before the cutoff time
 
-$$ t_{m base} = t_{m onset} - \Delta t, $$
+$$ t_{
+m base} = t_{
+m onset} - \Delta t, $$
 
-where $t_{m onset}$ is the flare onset given with `--onset` (default: the time of the reconstruction, `--t-out`) and $\Delta t$ is given with `--base-minutes` (default 10 min). Since the base depends only on $t_{m onset}$ and $\Delta t$, a download that starts earlier or later gives the same envelopes, as long as it contains the frame before the cutoff. When a programme has no frame that early, its earliest frame is used instead, the command prints a warning, and the programme is listed in `fallback_earliest`. The record `base` of `gcs_fit` in `config.json` (and of `gcs_fit.json`) holds the onset, $\Delta t$, the cutoff, the time of the base frame of every instrument and programme, and the fallbacks, so that the fit can be repeated. Frames at or before the base frame are not used in the height-time profile. The rule replaces the earlier choice of the earliest frame in the folder, with which the envelope areas, and with them the height-time points, depended on how early the download started: for the COR1-B frames of 2013 October 25, a folder that starts at 14:43 UT gave an envelope of 2.66 R⊙² at 15:08:21, whereas the folder of `corona3d fetch` (from 14:35 UT) gave 2.16 R⊙², and the extrapolated apex height at 15:00 UT changed from 1.93 R⊙ at 1039 km s⁻¹ to 1.80 R⊙ at 1126 km s⁻¹, within the uncertainty of 0.16 R⊙. The base frame should lie before the flare onset and before any earlier ejecta that are visible in the field of view, and `--running-diff` removes the dependence on a base frame altogether. The rule is tested offline on synthetic frame lists (`tests/test_gcs_fit.py`).
+where $t_{
+m onset}$ is the flare onset given with `--onset` (default: the time of the reconstruction, `--t-out`) and $\Delta t$ is given with `--base-minutes` (default 10 min). Since the base depends only on $t_{
+m onset}$ and $\Delta t$, a download that starts earlier or later gives the same envelopes, as long as it contains the frame before the cutoff. When a programme has no frame that early, its earliest frame is used instead, the command prints a warning, and the programme is listed in `fallback_earliest`. The record `base` of `gcs_fit` in `config.json` (and of `gcs_fit.json`) holds the onset, $\Delta t$, the cutoff, the time of the base frame of every instrument and programme, and the fallbacks, so that the fit can be repeated. Frames at or before the base frame are not used in the height-time profile. The rule replaces the earlier choice of the earliest frame in the folder, with which the envelope areas, and with them the height-time points, depended on how early the download started: for the COR1-B frames of 2013 October 25, a folder that starts at 14:43 UT gave an envelope of 2.66 R⊙² at 15:08:21, whereas the folder of `corona3d fetch` (from 14:35 UT) gave 2.16 R⊙², and the extrapolated apex height at 15:00 UT changed from 1.93 R⊙ at 1039 km s⁻¹ to 1.80 R⊙ at 1126 km s⁻¹, within the uncertainty of 0.16 R⊙. The base frame should lie before the flare onset and before any earlier ejecta that are visible in the field of view, and `--running-diff` removes the dependence on a base frame altogether. The rule is tested offline on synthetic frame lists (`tests/test_gcs_fit.py`).
 
 ### 7.3 Views that disagree with the others
 
@@ -130,14 +134,24 @@ A single instrument with a poor envelope can pull the fit away from the others, 
 
 1. A view is poor when its IoU is below 0.5 (`--iou-min` in `corona3d event`) and below 0.75 times the mean IoU of the other views. Of several poor views the one with the lowest IoU is taken, and a single view is never poor, since there is nothing to compare it with.
 2. The six (or four) parameters are fitted again without that view.
-3. The refit is kept only when the mean IoU over the remaining views rises by at least 0.05 compared with the fit to all views evaluated on the same views. Otherwise the poor view did not bias the shell, the fit to all views is kept, and the refit is only reported.
+3. The refit is kept unless the mean IoU over the remaining views falls by more than 0.01 compared with the fit to all views evaluated on the same views. A view that the shell cannot match, for instance COR2-A with an IoU of 0 on 2024 May 9, costs the other views nothing (COR1-A gave 0.9009 with it and 0.9017 without it), but it halves the mean IoU of the fit and would make an acceptable fit appear poor, and for this reason a gain is not required. When the mean IoU of the remaining views falls, the poor view did constrain the shell, the fit to all views is kept, and the refit is only reported.
 4. When the refit is kept, the rule is applied again to the remaining views, so that views are removed one at a time, the worst first. The number of views never falls below one.
 
 Both fits are written to the key `view_check` of `gcs_fit.json` (the instruments, the IoU of each, the mean, and whether the refit was kept) and to the section *Fit quality* of `event_report.md`, and the instruments left out are listed in `views_dropped` of the record `gcs_fit` of `config.json`. The IoU and the quality criteria of Section 7.4 then refer to the views that were kept, and the front of the height-time step is chosen among them. The limits of the rule are that the thresholds are conventions and not statistics, that a fit to one view leaves the direction and the extent along the line of sight poorly constrained (a fixed-direction fit is more reliable then), and that the criterion tests only the agreement of the shell with the envelopes, not whether the dropped envelope was the correct one.
 
 ### 7.4 Quality criteria
 
-A fit is judged poor, by `gcs.quality`, when the mean IoU over the instruments is below `--iou-min` (default 0.5), when no instrument gave an envelope, or when a fitted parameter lies within 0.5 % of its range from a bound of the optimisation. `corona3d event` uses these criteria to decide whether the fixed-direction fit replaces the free one, and the report states both outcomes.
+A fit is judged poor, by `gcs.quality`, when the mean IoU over the views that were kept is below `--iou-min` (default 0.5), when no instrument gave an envelope, or when a fitted parameter lies within 0.5 % of its range from a bound of the optimisation.
+
+With `--fit auto`, `corona3d event` decides between the free and the fixed-direction fit in the following order (`pipeline.fit_step`, `gcs.choose_fit`).
+
+1. The free fit is made on all views.
+2. The view rule of Section 7.3 is applied to it, and the free fit is repeated without the poor views.
+3. The quality of the result is judged with the criteria above, on the views that remain.
+4. Only when this result is poor, or when the free fit failed, the fit with the direction held at the flare site is made, again with the view rule.
+5. The better of the two fits is kept: a good fit beats a poor one; between two fits of the same quality the one with the higher mean IoU over its kept views wins, and a difference below 0.02 goes to the free fit, since the fixed-direction fit is a special case of it. A free fit that is good is therefore never replaced, and the fixed-direction fit is then not run.
+
+The order matters because the quality of a fit that still contains a view the shell cannot match is judged too low. On 2024 May 9 the free fit gave IoU values of 0.90 (COR1-A) and 0 (COR2-A), a mean of 0.45, and the fixed-direction fit with both views a mean of 0.38 only; after the view rule, the free fit on COR1-A alone is good, as judged by its mean IoU. The steps, both fits, the views used, and the criterion are written to the key `decision` of `gcs_fit.json` and to the section *Fit quality* of `event_report.md`, and the list of fitted views in the report is that of the views used in the accepted fit (`views_used`), so that an instrument without an envelope is never listed.
 
 ### 7.5 Shells that are drawn
 
