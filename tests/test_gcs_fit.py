@@ -368,3 +368,55 @@ def test_the_commands_pass_the_direction_cone(tmp_path, monkeypatch):
         with pytest.raises(ZeroDivisionError):
             main(["--home", str(tmp_path), *args])
         assert seen["direction_cone"] == want
+
+
+def _close_world(ious, hits):
+    """Synthetic world for check_views: `ious` {tuple of views: {view: IoU}}, `hits` {tuple of views: [parameters at a bound]}."""
+    names = sorted({k for t in ious for k in t})
+    vs = {n: (None, None) for n in names}
+    return vs, (lambda v: tuple(v)), (lambda v, q: ious[q]), (lambda q, v: hits.get(q, []))
+
+
+def test_same_spacecraft_pair_the_clean_single_view_beats_the_bound_hit_one_with_the_higher_iou():
+    """9 May 2024: cor2a has the higher IoU in the joint fit but its own fit sits at the kappa bound; cor1a alone is clean."""
+    ious = {("cor1a", "cor2a"): dict(cor1a=0.28, cor2a=0.62), ("cor2a",): dict(cor2a=0.798), ("cor1a",): dict(cor1a=0.90)}
+    vs, solve, score, problems = _close_world(ious, {("cor2a",): ["kappa"]})
+    close = lambda v: dict(cone_deg=15.0)                                    # both views from STEREO-A
+    views, q, iou, rec = G.check_views(vs, ("cor1a", "cor2a"), ious[("cor1a", "cor2a")], solve, score, limit=close, problems=problems)
+    assert list(views) == ["cor1a"] and rec["dropped"] == ["cor2a"] and rec["kept"] == "refit"
+    assert len(rec["refits"]) == 2 and {r["dropped"] for r in rec["refits"]} == {"cor1a", "cor2a"}
+    assert [r["bounds"] for r in rec["refits"] if r["dropped"] == "cor1a"] == [["kappa"]]
+    assert sum(r["chosen"] for r in rec["refits"]) == 1
+    text = " ".join(G.view_lines(rec))
+    assert "each view was fitted on its own" in text and "cor1a was chosen" in text and "at a bound: kappa" in text
+
+
+def test_same_spacecraft_pair_the_higher_iou_wins_when_both_or_neither_hit_a_bound():
+    ious = {("a", "b"): dict(a=0.1, b=0.6), ("a",): dict(a=0.7), ("b",): dict(b=0.8)}
+    vs, solve, score, _ = _close_world(ious, {})
+    close = lambda v: dict(cone_deg=15.0)
+    for hits in ({}, {("a",): ["kappa"], ("b",): ["alpha_deg"]}):
+        views, *_ = G.check_views(vs, ("a", "b"), ious[("a", "b")], solve, score, limit=close, problems=lambda q, v: hits.get(q, []))
+        assert list(views) == ["b"]
+
+
+def test_a_tie_in_iou_keeps_the_view_nearer_the_sun():
+    ious = {("cor1a", "cor2a"): dict(cor1a=0.2, cor2a=0.7), ("cor1a",): dict(cor1a=0.80), ("cor2a",): dict(cor2a=0.81)}
+    vs, solve, score, problems = _close_world(ious, {})
+    views, *_ = G.check_views(vs, ("cor1a", "cor2a"), ious[("cor1a", "cor2a")], solve, score, limit=lambda v: dict(cone_deg=15.0), problems=problems)
+    assert list(views) == ["cor1a"]                                           # smaller field of view
+
+
+def test_separated_views_keep_the_joint_fit_rule_exactly():
+    """2013 case: observers far apart, so limit gives None and the lowest-IoU view is dropped as before; one refit only."""
+    ious = {("c2", "cor1a"): dict(c2=0.9, cor1a=0.2), ("c2",): dict(c2=0.9)}
+    vs, solve, score, problems = _close_world(ious, {("c2",): ["kappa"]})
+    views, q, iou, rec = G.check_views(vs, ("c2", "cor1a"), ious[("c2", "cor1a")], solve, score, limit=lambda v: None, problems=problems)
+    assert list(views) == ["c2"] and len(rec["refits"]) == 1 and rec["refits"][0]["candidate"] is False
+    assert "Refit without cor1a" in " ".join(G.view_lines(rec)) and "each view was fitted" not in " ".join(G.view_lines(rec))
+
+
+def test_bound_hits_name_the_parameters_and_leave_a_direction_at_the_cone_alone():
+    t = dict(height=5.0, kappa=0.1, alpha_deg=59.9, lon_stonyhurst=43.0, lat_deg=-16.0, tilt_pythea_deg=-30.0)
+    assert [h[0] for h in G.bound_hits(t, (28.0, -14.0), fix_direction=True)] == ["kappa", "alpha_deg"]
+    assert G.quality(dict(t_ref=dict(t, iou=dict(a=0.8))), (28.0, -14.0), True) != []

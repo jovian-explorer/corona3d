@@ -79,7 +79,21 @@ def poor_view(iou, iou_min=IOU_MIN, ratio=POOR_RATIO):
     return min(bad, key=bad.get) if bad else None
 
 
-def check_views(views, q, iou, solve, score, iou_min=IOU_MIN, ratio=POOR_RATIO, improve=IMPROVE_MIN, drop=True):
+def _tie_pick(cands, tie=TIE_IOU):
+    """Index of the preferred refit among candidate dicts (keys bounds, mean_iou, views): a fit without
+    parameters at a bound beats one with them; then the higher mean IoU; refits within `tie` of the best
+    mean IoU go to the one that keeps more views, then to the views nearer the Sun (smaller outer edge
+    of the field of view)."""
+    clean = [i for i, c in enumerate(cands) if not c["bounds"]]
+    pool = clean or list(range(len(cands)))
+    top = max(cands[i]["mean_iou"] for i in pool)
+    near = [i for i in pool if top - cands[i]["mean_iou"] < tie]
+    sun = lambda i: float(np.mean([FOV[k][1] if k in FOV else 0.0 for k in cands[i]["views"]]))
+    return min(near, key=lambda i: (-len(cands[i]["views"]), sun(i), -cands[i]["mean_iou"]))
+
+
+def check_views(views, q, iou, solve, score, iou_min=IOU_MIN, ratio=POOR_RATIO, improve=IMPROVE_MIN, drop=True,
+                limit=None, problems=None):
     """Refit without the poor views. `views` is {name: view}, `q` the parameters of the fit to all of
     them, `iou` {name: IoU} of that fit; solve(views) returns the parameters of a fit to the given
     views and score(views, q) their {name: IoU}.
@@ -89,27 +103,45 @@ def check_views(views, q, iou, solve, score, iou_min=IOU_MIN, ratio=POOR_RATIO, 
     IoU over the remaining views falls by more than -`improve` compared with the previous fit on the
     same views (a view that the shell cannot match, such as an IoU of 0, costs the others nothing and
     only lowers the mean); otherwise the previous fit is kept and the search ends. The number of views never
-    falls below one. Returns (views, q, iou, record); the record lists the full fit and every refit."""
+    falls below one.
+
+    When `limit(views)` is not None (the observers lie within MIN_SEP of each other, so the direction is
+    tied to the flare site) the joint fit must not decide which view survives: every subset obtained by
+    dropping one view (each single view, for two views) is fitted separately and the refits are compared
+    by _tie_pick, using `problems(q, views)`, the list of parameters of a fit that sit at a bound. The
+    chosen refit then faces the same improvement test. Returns (views, q, iou, record); the record
+    lists the full fit and every refit, each with the key `bounds`."""
     rec = dict(rule=f"drop the view with IoU below {iou_min:g} and below {ratio:g} of the mean of the others, "
                     f"keep the refit unless the mean IoU of the kept views falls by more than {-improve:g}; at least one view stays",
-               enabled=bool(drop), full=dict(views=list(views), iou=dict(iou), mean_iou=round(float(np.mean(list(iou.values()))), 3)),
+               enabled=bool(drop), full=dict(views=list(views), iou={k: round(float(v), 3) for k, v in iou.items()}, mean_iou=round(float(np.mean(list(iou.values()))), 3),
+                                             bounds=list(problems(q, views)) if problems else []),
                refits=[], dropped=[], kept="full")
     while drop and len(views) > 1:
         bad = poor_view(iou, iou_min, ratio)
         if bad is None:
             break
-        rest = {k: v for k, v in views.items() if k != bad}
-        q2 = solve(rest)
-        iou2 = score(rest, q2)
-        before = float(np.mean([iou[k] for k in rest]))
-        after = float(np.mean(list(iou2.values())))
-        ok = after - before >= improve
-        rec["refits"].append(dict(dropped=bad, views=list(rest), iou=dict(iou2), mean_iou=round(after, 3),
-                                  mean_iou_before=round(before, 3), kept=bool(ok)))
+        close = limit is not None and limit(views) is not None
+        subsets = ([[k for k in views if k != d] for d in views] if close else [[k for k in views if k != bad]])
+        cands = []
+        for names in subsets:
+            rest = {k: views[k] for k in names}
+            q2 = solve(rest)
+            iou2 = score(rest, q2)
+            after = float(np.mean(list(iou2.values())))
+            before = float(np.mean([iou[k] for k in names]))
+            cands.append(dict(dropped=[k for k in views if k not in names][0], views=list(names), iou={k: round(float(v), 3) for k, v in iou2.items()},
+                              mean_iou=round(after, 3), mean_iou_before=round(before, 3), gain=after - before,
+                              bounds=list(problems(q2, rest)) if problems else [], q=q2, rest=rest, kept=False))
+        best = _tie_pick(cands) if close else 0
+        ok = cands[best]["gain"] >= improve
+        cands[best]["kept"] = bool(ok)
+        for i, c in enumerate(cands):
+            rec["refits"].append(dict({k: v for k, v in c.items() if k not in ("q", "rest", "gain")}, candidate=close, chosen=(i == best)))
         if not ok:
             break
-        views, q, iou = rest, q2, iou2
-        rec["dropped"].append(bad)
+        c = cands[best]
+        views, q, iou = c["rest"], c["q"], c["iou"]
+        rec["dropped"] += [k for k in rec["full"]["views"] if k not in views and k not in rec["dropped"]]
         rec["kept"] = "refit"
     return views, q, iou, rec
 
@@ -119,12 +151,22 @@ def view_lines(rec):
     if not rec:
         return []
     f = rec["full"]
+    hit = lambda b: f"; at a bound: {', '.join(b)}" if b else ""
     L = [f"Fit to all views ({', '.join(f['views'])}): IoU " + ", ".join(f"{k} {v:g}" for k, v in f["iou"].items())
-         + f", mean {f['mean_iou']:g}."]
+         + f", mean {f['mean_iou']:g}{hit(f.get('bounds'))}."]
+    cand = [r for r in rec["refits"] if r.get("candidate")]
     for r in rec["refits"]:
+        end = ("chosen." if r["chosen"] else "not chosen.") if r.get("candidate") else               ("kept." if r["kept"] else "not kept (the mean IoU of the kept views fell).")
         L.append(f"Refit without {r['dropped']} ({', '.join(r['views'])}): IoU " + ", ".join(f"{k} {v:g}" for k, v in r["iou"].items())
-                 + f", mean {r['mean_iou']:g} against {r['mean_iou_before']:g} for the same views in the fit to all; "
-                 + ("kept." if r["kept"] else "not kept (the mean IoU of the kept views fell)."))
+                 + f", mean {r['mean_iou']:g} against {r['mean_iou_before']:g} for the same views in the fit to all{hit(r.get('bounds'))}; " + end)
+    if cand:
+        ch = next(r for r in cand if r.get("chosen"))
+        clean = [r for r in cand if not r["bounds"]]
+        why = ("only this refit has no parameter at a bound" if len(clean) == 1 and not ch["bounds"] else
+               "all refits have a parameter at a bound, so the higher mean IoU decides" if not clean else
+               "the mean IoU decides among the refits without a parameter at a bound; a tie keeps more views and then the view nearer the Sun")
+        L.append(f"The observers lie close together, so each view was fitted on its own and the choice was made among these refits, not by the fit to all views: "
+                 f"{', '.join(ch['views'])} was chosen ({why}) and the refit was " + ("kept." if ch["kept"] else "not kept because the mean IoU of the kept views fell."))
     if not rec["refits"]:
         L.append("No view was poor." if rec["enabled"] else "Views were kept as given (--keep-all-views).")
     return L
@@ -157,6 +199,15 @@ def bounds(flare, fix_direction=False, cone=None):
             [(flare[0] - dl, flare[0] + dl), (flare[1] - db, flare[1] + db)]) + [(-90.0, 90.0)]
 
 
+def bound_hits(t, flare, fix_direction=False):
+    """Parameters of `t` (dict of KEYS, or the six values in KEYS order) within 0.5 % of their range of a bound
+    of the optimisation: [(name, value, low, high)]. lon/lat are not tested when the direction is fixed or tied."""
+    t = dict(zip(KEYS, t)) if not isinstance(t, dict) else t
+    names = ["height", "kappa", "alpha_deg"] + ([] if fix_direction else ["lon_stonyhurst", "lat_deg"]) + ["tilt_pythea_deg"]
+    return [(n, t[n], lo, hi) for n, (lo, hi) in zip(names, bounds(flare, fix_direction))
+            if min(t[n] - lo, hi - t[n]) <= 0.005 * (hi - lo)]
+
+
 def quality(out, flare, fix_direction=False, iou_min=IOU_MIN):
     """Problems of a result of fit(): [] when it is acceptable. A fit is poor when the mean IoU
     over the instruments is below iou_min, when no instrument gave an IoU, or when a fitted
@@ -169,10 +220,8 @@ def quality(out, flare, fix_direction=False, iou_min=IOU_MIN):
         why.append("no instrument had an envelope")
     elif np.mean(list(iou.values())) < iou_min:
         why.append(f"mean IoU {np.mean(list(iou.values())):.2f} is below {iou_min:g}")
-    names = ["height", "kappa", "alpha_deg"] + ([] if fix_direction else ["lon_stonyhurst", "lat_deg"]) + ["tilt_pythea_deg"]
-    for n, (lo, hi) in zip(names, bounds(flare, fix_direction)):
-        if min(t[n] - lo, hi - t[n]) <= 0.005 * (hi - lo):
-            why.append(f"{n} = {t[n]:g} is at its bound ({lo:g} to {hi:g})")
+    for n, v, lo, hi in bound_hits(t, flare, fix_direction):
+        why.append(f"{n} = {v:g} is at its bound ({lo:g} to {hi:g})")
     return why
 
 
@@ -504,8 +553,10 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
                                                     seed=3, polish=True).x))
 
         score = lambda vs, q: {k: float(v.iou(shell(q, t_ref))) for k, (_, v) in vs.items()}
+        problems = lambda q, vs: [h[0] for h in bound_hits(q, flare, fix_direction or limit(vs) is not None)]
         q24 = solve(V)
-        V, q24, _, rec = check_views(V, q24, score(V, q24), solve, score, iou_min, drop=drop_poor_views)
+        V, q24, _, rec = check_views(V, q24, score(V, q24), solve, score, iou_min, drop=drop_poor_views,
+                                     limit=limit, problems=problems)
         for line in view_lines(rec):
             print("views:", line)
     keys = tuple(V)

@@ -123,6 +123,7 @@ def fit_step(h, cfg, a, flare, views, log):
         m = gcs.mean_iou(out)
         attempts.append(dict(mode=name, status="poor" if why else "good", why=why, view_check=out.get("view_check"),
                              views=out.get("views_used"), direction=out.get("direction"), dropped=(out.get("view_check") or {}).get("dropped", []),
+                             bounds=[h[0] for h in gcs.bound_hits(out["t_ref"], flare, fixed or bool((out.get("direction") or {}).get("constrained")))],
                              mean_iou=None if m is None else round(m, 3)))
         log(f"gcs: {name} fit (views {', '.join(out.get('views_used') or [])}) "
             f"{'poor: ' + '; '.join(why) if why else 'accepted'}")
@@ -430,6 +431,11 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
             if fit.get("accepted") and "fixed direction" in names:
                 L[-1] += f", the better of the two (a good fit beats a poor one; otherwise the higher mean IoU of the kept views, a difference below {gcs.TIE_IOU:g} going to the free fit)"
             L[-1] += "."
+        acc = next((t for t in fit["attempts"] if t["mode"] == fit.get("accepted")), None)
+        hit = [b for b in (acc or {}).get("bounds", []) if b in ("kappa", "alpha_deg")]
+        if hit:
+            L.append(f"- The kept fit has {' and '.join(hit)} at its bound, so the images do not fix the shape of the shell "
+                     "in that parameter and the fit stays poor.")
         if g.get("iou"):
             L.append(f"- Intersection over union of the accepted shell with the envelope, per view at {g['t_ref']}: "
                      + ", ".join(f"{k} {v:g}" for k, v in g["iou"].items())
