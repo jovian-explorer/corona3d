@@ -106,6 +106,9 @@ def _main(argv=None):
     ev.add_argument("--t-ref", help="time of the six-parameter fit (default: chosen from the images, the earliest coronagraph "
                     "frame after --time at which the CME is well developed; the report states it). The radio and shell "
                     "time is always --time")
+    ev.add_argument("--wl-at", choices=("fit", "burst"), default="fit",
+                    help="time of the coronagraph figure: the fit time (default) or the burst time --time, with the shell "
+                         "at t_out and each coronagraph's nearest frame after its base frame (labelled when more than 30 min away)")
     ev.add_argument("--strict", action="store_true",
                     help="exit with status 1 when any step failed (default: 0 for a partial result, with the failures "
                          "under Warnings in event_report.md; 1 only when no figure could be drawn)")
@@ -131,6 +134,12 @@ def _main(argv=None):
     r.add_argument("--out", default="figures/corona3d.png", help="figure path, relative to the working directory")
     r.add_argument("--half", type=float, help="panel half-height [R_sun] for all three panels")
     r.add_argument("--wl-time", help="white-light frame, e.g. 2013-10-25T15:24")
+    r.add_argument("--wl-at", choices=("fit", "burst"), default="fit",
+                   help="time of the coronagraph figure: the fit time wl_time (default) or the burst time, with the shell at "
+                        "t_out and each coronagraph's nearest frame after its base frame, labelled when more than 30 min away")
+    r.add_argument("--wl-height", type=float, help="apex height [R_sun] of the shell at the burst time (--wl-at burst), "
+                   "for a configuration without gcs_fit; drawn as assumed")
+    r.add_argument("--wl-height-note", help="reason for --wl-height (written on the figure)")
     r.add_argument("--view", action="append", default=[], metavar="PANEL=VIEW",
                    help="viewpoint of a panel: a=earth, b=north, c=stereo, or a Carrington "
                         "longitude and latitude of the viewing direction with an optional roll, "
@@ -229,6 +238,9 @@ def _main(argv=None):
     params = {}
     if a.wl_time:
         params["wl_time"] = a.wl_time
+        params["wl_time_given"] = a.wl_time
+    if a.wl_at == "burst":
+        params.update(wl_at="burst", wl_height=a.wl_height, wl_height_note=a.wl_height_note)
     if a.radio_sources:
         params["radio_sources"] = json.loads(a.radio_sources)
     from .reconstruction import make_figure, parse_view

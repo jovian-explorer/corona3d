@@ -84,9 +84,24 @@ def nearest_times(frames, t):
     return "nearest available frames: " + (" and ".join(parts) if parts else "none in the folder")
 
 
-def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B"):
+def nearest_frame(wl_dir, inst, sc, window, when):
+    """(frame time, signed gap in minutes) of the frame of `inst` inside `window` that lies nearest to
+    `when` and after the base frame (the first frame of the window), or None when the window has no
+    frame after the base frame."""
+    t0, t1 = utc(window[0]), utc(window[1])
+    t = utc(when)
+    frames = [f for f in _frames(wl_dir, inst, sc) if t0 <= f[0] <= t1][1:]
+    if not frames:
+        return None
+    tf = min(frames, key=lambda f: abs(f[0] - t))[0]
+    return tf, (tf - t).total_seconds() / 60.0
+
+
+def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B", nearest=False):
     """Plane of one instrument at the frame nearest to `when`, compared with the first frame of
-    `window` ([start, end]); returns (grid, frame time, base time)."""
+    `window` ([start, end]); returns (grid, frame time, base time). With `nearest` a frame farther
+    than WL_MAX_GAP_MIN is used too, as long as it is the nearest one after the base frame (the
+    caller labels it); without it such a frame is refused."""
     t0, t1 = utc(window[0]), utc(window[1])
     every = _frames(wl_dir, inst, sc)
     frames = [f for f in every if t0 <= f[0] <= t1]
@@ -96,8 +111,13 @@ def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B"):
                                 f"({nearest_times(every, t)}); run `corona3d fetch --wl`")
     if not t0 <= t <= t1:
         raise ValueError(f"wl_time {when} lies outside wl_window {window}")
-    tf, files = min(frames, key=lambda fr: abs(fr[0] - t))
-    if abs((tf - t).total_seconds()) > 60 * WL_MAX_GAP_MIN:
+    if nearest:
+        if len(frames) < 2:
+            raise ValueError(f"no {inst} frame after the base frame in {window[0]} to {window[1]} ({nearest_times(every, t)})")
+        tf, files = min(frames[1:], key=lambda fr: abs(fr[0] - t))
+    else:
+        tf, files = min(frames, key=lambda fr: abs(fr[0] - t))
+    if not nearest and abs((tf - t).total_seconds()) > 60 * WL_MAX_GAP_MIN:
         raise ValueError(f"no {inst} frame within {WL_MAX_GAP_MIN:g} min of wl_time {when} ({nearest_times(every, t)}); "
                          "set wl_time (or --t-ref) to one of them")
     if tf == frames[0][0]:

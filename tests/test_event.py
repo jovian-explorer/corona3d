@@ -476,3 +476,32 @@ def test_pick_t_ref_requires_the_front_inside_the_field():
     two = {"cor1a": [(t(35), 4.0, 3.0), (t(50), 4.0, 3.0)], "cor2a": [(t(35), 4.0, 14.5), (t(50), 4.0, 8.0)]}
     got, dev, rule = pick_t_ref(two, {"cor1a": 4.0, "cor2a": 15.0}, t(32))
     assert got == t(50) and dev == dict(cor1a=True, cor2a=True)
+
+
+def test_burst_shell_uses_t_out_and_marks_the_height_assumed():
+    import pytest
+    from corona3d.reconstruction import burst_shell
+    g = dict(height=1.5, kappa=0.4, alpha_deg=30.0, lon_stonyhurst=30.0, lat_deg=-18.0, tilt_deg=-90.0)
+    legacy = dict(time="2024-05-09T17:32", gcs=g, gcs_wl=dict(g, height=6.0, time="2024-05-09T18:52"))
+    with pytest.raises(ValueError):                       # no gcs_fit and no height given
+        burst_shell(legacy)
+    with pytest.raises(ValueError):                       # a height needs its note
+        burst_shell(dict(legacy, wl_height=1.77))
+    q = burst_shell(dict(legacy, wl_height=1.77, wl_height_note="kinematic"))
+    assert q["gcs_wl"]["height"] == 1.77 and q["gcs_wl"]["time"] == "2024-05-09T17:32"
+    assert q["wl_time"] == "2024-05-09T17:32" and q["wl_shell"]["assumed"]
+    fit = dict(legacy, gcs_fit=dict(height_source="assumed", height_note="by hand"), gcs=dict(g, height=1.77))
+    q = burst_shell(fit)
+    assert q["gcs_wl"]["height"] == 1.77 and q["wl_shell"]["assumed"] and q["wl_shell"]["note"] == "by hand"
+    q = burst_shell(dict(fit, gcs_fit=dict(height_source="measured")))
+    assert not q["wl_shell"]["assumed"]
+
+
+def test_nearest_frame_skips_the_base_frame_and_ignores_the_gap(tmp_path, monkeypatch):
+    from corona3d import whitelight as wl
+    t = lambda h, m: datetime(2024, 5, 9, h, m)
+    monkeypatch.setattr(wl, "_frames", lambda d, i, s="B": [(t(14, 48), []), (t(18, 52), []), (t(19, 4), [])])
+    win = ["2024-05-09T14:40", "2024-05-09T19:40"]
+    assert wl.nearest_frame(tmp_path, "c2", "A", win, "2024-05-09T17:32") == (t(18, 52), 80.0)
+    monkeypatch.setattr(wl, "_frames", lambda d, i, s="B": [(t(14, 48), [])])
+    assert wl.nearest_frame(tmp_path, "c2", "A", win, "2024-05-09T17:32") is None

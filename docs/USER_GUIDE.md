@@ -133,6 +133,7 @@ draws the three-panel figure into `figures/corona3d.png`. By default, panel a sh
 | `--view PANEL=VIEW` | the viewpoint of a panel (Section 6); may be given for each panel |
 | `--out PATH` | file of the figure, relative to the working directory (default `figures/corona3d.png`) |
 | `--half H` | half-height of all three panels in R⊙; by default each panel has the framing of the configuration (about 1.5 R⊙), widened to 6 R⊙ in the panel of C2 or COR2 and to 4 R⊙ in the panel of COR1 alone |
+| `--wl-at burst` | draws the coronagraph panels at the burst time (`time` of the configuration) instead of the fit time: the shell is the one at `--t-out` (`gcs` when `gcs_fit` exists, with a height that the fit marks as assumed staying marked), and each coronagraph shows its own frame nearest to that time that follows its base frame, the first frame of `wl_window`. A frame more than 30 min away is still used and is labelled on the panel and in the report as the nearest frame with its distance in minutes. A configuration without `gcs_fit` needs `--wl-height H` and `--wl-height-note TEXT`; the height is then drawn as assumed. `corona3d event --wl-at burst` does the same for the coronagraph figure of the event |
 | `--wl-time T` | time of the coronagraph frames, e.g. `2013-10-25T15:12`; the frame nearest to it within `wl_window` is taken for each instrument |
 | `--radio-sources JSON` | radio sources for the radio layer (Section 5.7) |
 
@@ -145,6 +146,7 @@ corona3d render --c2 --cor1 --cor2 --out figures/corona3d_wl.png           # wit
 corona3d render --cor1 --no-open --no-closed --out figures/cor1.png        # COR1 in panel c (widened to 4 R_sun); the other layers stay on
 corona3d render --cor2 --half 15 --out figures/cor2_full.png               # the whole COR2 field, out to 15 R_sun, in all panels
 corona3d render --c2 --wl-time 2013-10-25T15:36 --out figures/c2_1536.png  # a later C2 frame
+corona3d render --radio --c2 --cor1 --cor2 --wl-at burst --wl-height 1.77 --wl-height-note "kinematic estimate"  # shell and frames at the burst time
 corona3d render --view b=300,20 --view c=north --out figures/views.png     # other viewpoints for panels b and c
 ```
 

@@ -59,6 +59,25 @@ def wl_gaps(wl, cfg, wl_on, sc):
     return out
 
 
+def wl_gaps_burst(wl, cfg, wl_on, sc):
+    """{instrument: text} for the instruments with no frame after the base frame in wl_window; every other
+    instrument is drawn with its nearest such frame (`--wl-at burst`), however far from the burst."""
+    from . import whitelight as wlt
+    return {k: "no frame after the base frame (the first frame of wl_window)" for k, ok in wl_on.items()
+            if ok and wlt.nearest_frame(wl, k, sc.upper(), cfg["wl_window"], cfg["time"]) is None}
+
+
+def wl_burst_frames(wl, cfg, wl_on, sc, gaps):
+    """{instrument: (frame time, minutes from the burst)} of the frames drawn at the burst time."""
+    from . import whitelight as wlt
+    out = {}
+    for k, ok in wl_on.items():
+        r = wlt.nearest_frame(wl, k, sc.upper(), cfg["wl_window"], cfg["time"]) if ok and k not in gaps else None
+        if r:
+            out[k] = (f"{r[0]:%Y-%m-%dT%H:%M:%S}", round(r[1], 1))
+    return out
+
+
 def wl_nearest(wl, cfg, wl_on, sc):
     """(time, instrument) of the frame closest to wl_time that can be drawn (inside wl_window and not the
     first frame of it), over the instruments with images; None when there is none."""
@@ -279,8 +298,12 @@ def run(h, a, log=print):
     # render
     from . import reconstruction
     figures, wl_on = {}, {k: avail[k] for k in ("c2", "cor1", "cor2")}
-    st["wl_gap"] = gaps = wl_gaps(paths.wl_dir(h), cfg, wl_on, sc)
-    if wl_on and any(wl_on.values()) and all(k in gaps for k, ok in wl_on.items() if ok):
+    burst = getattr(a, "wl_at", "fit") == "burst"
+    st["wl_gap"] = gaps = wl_gaps(paths.wl_dir(h), cfg, wl_on, sc) if not burst else wl_gaps_burst(paths.wl_dir(h), cfg, wl_on, sc)
+    st["wl_at"] = "burst" if burst else "fit"
+    if burst:
+        st["wl_burst"] = wl_burst_frames(paths.wl_dir(h), cfg, wl_on, sc, gaps)
+    if not burst and wl_on and any(wl_on.values()) and all(k in gaps for k, ok in wl_on.items() if ok):
         near = wl_nearest(paths.wl_dir(h), cfg, wl_on, sc)           # no instrument has a usable frame at wl_time
         if near:
             old = cfg.get("wl_time") or cfg["time"]
@@ -305,7 +328,8 @@ def run(h, a, log=print):
             step(f"render_{name}", "figure newer than config.json; skipped")
         else:
             try:
-                reconstruction.make_figure(FIGURES[name], h, None, None, **dict(ON, **layers))
+                reconstruction.make_figure(FIGURES[name], h, None, dict(wl_at="burst") if burst and name == "wl" else None,
+                                           **dict(ON, **layers))
                 figures[name] = out
                 step(f"render_{name}", "drawn")
             except Exception as e:
@@ -361,6 +385,14 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
                             f"extrapolated from the front in {g['front']} ({g['n_frames']} frames, {g['speed_km_s']:g} km/s).")
         else:
             assumed.append(f"The apex height at {g['t_out']} is {g['height_t_out']:g} R_sun, given by hand: {g.get('height_note', '')}")
+        if st.get("wl_at") == "burst":
+            note = f" ({g.get('height_note')})" if g.get("height_source") == "assumed" else ""
+            wlf = "; ".join(f"{k} {tf}" + (f", nearest frame, {abs(gap):g} min {'after' if gap > 0 else 'before'} the burst"
+                                          if abs(gap) > 30 else f", {abs(gap):g} min from the burst")
+                            for k, (tf, gap) in (st.get("wl_burst") or {}).items())
+            assumed.append(f"The coronagraph figure is drawn at the burst time {g['t_out']}, with the shell at t_out "
+                           f"(apex height {cfg['gcs']['height']:g} R_sun{', assumed' + note if g.get('height_source') == 'assumed' else ''}), "
+                           f"not at the fit time. Frames: {wlf or 'none'}.")
         dc = g.get("direction_constraint")
         if dc:
             where = (f"held at the flare site (Stonyhurst longitude {flare[0]:g} deg, latitude {flare[1]:g} deg)" if dc["cone_deg"] <= 0

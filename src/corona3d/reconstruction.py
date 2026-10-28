@@ -73,10 +73,39 @@ def shell_of(g, p, time):
                         nbvertsl=p["mesh_rings"]["nbvertsl"], nbvertcirc=p["mesh_rings"]["nbvertcirc"])
 
 
+def burst_shell(p):
+    """Configuration for a coronagraph figure at the burst time (`wl_at` "burst"): the shell is the one
+    at t_out (`gcs` of a fitted configuration, `gcs_wl` of one without `gcs_fit`) placed at the time of
+    the event, and wl_time is the time of the event unless it was given. A height given with `wl_height`
+    replaces the fitted one; it is called assumed, with `wl_height_note`, as is any height that the fit
+    itself marks as assumed. Returns a copy of p with `gcs_wl`, `wl_time` and `wl_shell` set."""
+    p = dict(p)
+    fit = p.get("gcs_fit")
+    h_given = p.get("wl_height")
+    if h_given is not None and not p.get("wl_height_note"):
+        raise ValueError("--wl-height needs --wl-height-note, the reason for the assumed height")
+    if fit:
+        g, assumed, note = dict(p["gcs"]), fit.get("height_source") == "assumed", fit.get("height_note", "")
+    elif h_given is not None:
+        g, assumed, note = dict(p["gcs_wl"]), False, ""
+    else:
+        raise ValueError("the configuration has no gcs_fit, so the height of the shell at the burst time is not known: "
+                         "give --wl-height and --wl-height-note")
+    if h_given is not None:
+        g["height"], assumed, note = float(h_given), True, p["wl_height_note"]
+    g["time"] = p["time"]
+    p["gcs_wl"] = g
+    p["wl_time"] = p.get("wl_time_given") or p["time"]
+    p["wl_shell"] = dict(height=g["height"], assumed=assumed, note=note, time=p["time"])
+    return p
+
+
 def reconstruct(p=None, on=None, data_root="."):
     """Build the layers that are switched on; p and on may hold only the keys that differ from
     the defaults. Returns a dictionary of the layers and of the times used."""
     p = merge(default_config(), p)
+    if p.get("wl_at") == "burst":
+        p = burst_shell(p)
     on = dict(ON, **(on or {}))
     sc = {"times": {"shell": p["time"]}}
     if on["surface"] or on["open"] or on["closed"] or on["streamer"]:
@@ -102,6 +131,9 @@ def reconstruct(p=None, on=None, data_root="."):
         if any(on[i] for i in WL) and p.get("gcs_wl"):
             sc["gcs"] = shell_of(p["gcs_wl"], p, p["gcs_wl"]["time"])   # shell at the image time
             sc["times"]["shell"] = p["gcs_wl"]["time"]
+            if p.get("wl_shell"):
+                s = p["wl_shell"]
+                sc["times"]["shell_height"] = f"height {s['height']:g} R_sun" + (", assumed" if s["assumed"] else "")
     if on["streamer"]:
         # closed lines threaded by the CME shell: traced from every vertex of the shell above
         # the inner boundary of the model
@@ -158,10 +190,15 @@ def reconstruct(p=None, on=None, data_root="."):
             print("radio: no radio images and no radio_sources; layer empty")
     for inst in WL:
         if on[inst]:
-            from .whitelight import INSTR, load_plane
+            from .whitelight import INSTR, WL_MAX_GAP_MIN, load_plane, utc
+            burst = p.get("wl_at") == "burst"
             sc[inst], tf, tb = load_plane(inst, wl_dir(data_root), p["wl_time"], p[INSTR[inst]["obs"]],
-                                          p["wl_window"], p["wl_mode"], p["stereo_sc"])
+                                          p["wl_window"], p["wl_mode"], p["stereo_sc"], nearest=burst)
             sc["times"][inst] = (tf, tb)
+            gap = (tf - utc(p["wl_time"])).total_seconds() / 60.0
+            if burst and abs(gap) > WL_MAX_GAP_MIN:        # a frame far from the burst: say so on the figure
+                sc["times"].setdefault("wl_gap", {})[inst] = gap
+                print(f"{inst}: nearest frame, {abs(gap):.0f} min {'after' if gap > 0 else 'before'} the burst")
     return sc
 
 
@@ -311,7 +348,8 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
         imgs.append(render(sc, on, p, d, up, (h, fr[1], fr[2]), owner, out.parent, f"view_{'abc'[i]}", fr[0]))
 
     t = sc["times"]
-    notes = [[f"model {p['run'].split('/')[0]}, shell {str(t['shell'])[11:16]} UT"] for _ in imgs]
+    height = f", {t['shell_height']}" if t.get("shell_height") else ""
+    notes = [[f"model {p['run'].split('/')[0]}, shell {str(t['shell'])[11:16]} UT{height}"] for _ in imgs]
     for i in range(len(notes)):
         for label, ta, tb_, n in t.get("radio", []):
             notes[i].append(f"{label}, {n} images {ta:%H:%M:%S}-{tb_:%H:%M:%S} UT")
@@ -320,6 +358,9 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
             if inst in t:
                 tf, tb = t[inst]
                 notes[i].append(f"{inst.upper()} {tf:%H:%M} vs {tb:%H:%M} UT ({p['wl_mode']})")
+                gap = (t.get("wl_gap") or {}).get(inst)
+                if gap is not None:
+                    notes[i][-1] += f", nearest frame, {abs(gap):.0f} min {'after' if gap > 0 else 'before'} the burst"
     fig = Figure(figsize=(16, 4.9))           # no GUI backend: drawn off screen
     for i, (title, img) in enumerate(zip(titles, imgs)):
         ax = fig.add_axes([0.005 + i * 0.333, 0.17, 0.325, 0.81])
