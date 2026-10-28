@@ -140,6 +140,8 @@ def _main(argv=None):
     r.add_argument("--wl-height", type=float, help="apex height [R_sun] of the shell at the burst time (--wl-at burst), "
                    "for a configuration without gcs_fit; drawn as assumed")
     r.add_argument("--wl-height-note", help="reason for --wl-height (written on the figure)")
+    r.add_argument("--shell-on-top", action="store_true",
+                   help="draw the GCS shell over the model surface, so that a shell close to the Sun stays visible")
     r.add_argument("--view", action="append", default=[], metavar="PANEL=VIEW",
                    help="viewpoint of a panel: a=earth, b=north, c=stereo, or a Carrington "
                         "longitude and latitude of the viewing direction with an optional roll, "
@@ -241,6 +243,8 @@ def _main(argv=None):
         params["wl_time_given"] = a.wl_time
     if a.wl_at == "burst":
         params.update(wl_at="burst", wl_height=a.wl_height, wl_height_note=a.wl_height_note)
+    if getattr(a, "shell_on_top", False):
+        params["shell_on_top"] = True
     if a.radio_sources:
         params["radio_sources"] = json.loads(a.radio_sources)
     from .reconstruction import make_figure, parse_view

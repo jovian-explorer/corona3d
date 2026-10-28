@@ -232,16 +232,30 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
                 lines = [lines[i] for i in np.linspace(0, len(lines) - 1, p["streamer_max_lines"]).astype(int)]
             pl.add_mesh(polyline(lines), **kw)
     if on["gcs"]:
-        pl.add_mesh(polyline(list(sc["gcs"])), color=p["mesh_rings"]["color"],
-                    line_width=p["mesh_rings"]["width"])
+        shell = pl.add_mesh(polyline(list(sc["gcs"])), color=p["mesh_rings"]["color"],
+                            line_width=p["mesh_rings"]["width"])
     for f, lines in (sc.get("radio_contours", []) if on["radio"] else []):
         if lines:
             pl.add_mesh(polyline(lines), color=cm.cool(np.clip((f - 150) / 300, 0, 1))[:3], line_width=4.0)
+    blobs = []
     for f, xyz, rgb in (sc.get("radio", []) if on["radio"] else []):
         cloud = pv.PolyData(xyz)
         cloud["rgb"] = (np.asarray(rgb) * 255).astype(np.uint8)
-        pl.add_mesh(cloud.glyph(geom=pv.Sphere(radius=p["radio_radius"]), scale=False, orient=False),
-                    scalars="rgb", rgb=True, smooth_shading=True, ambient=0.35, specular=0.4)
+        blobs += [pl.add_mesh(cloud.glyph(geom=pv.Sphere(radius=p["radio_radius"]), scale=False, orient=False),
+                              scalars="rgb", rgb=True, smooth_shading=True, ambient=0.35, specular=0.4)]
+    if on["gcs"] and p.get("shell_on_top"):
+        # a second layer that shares the camera, so that the shell stays visible where the
+        # surface of the model would hide it (a low shell at the time of the burst)
+        from vtkmodules.vtkRenderingCore import vtkRenderer
+        top = vtkRenderer()
+        top.SetLayer(1)
+        top.SetActiveCamera(pl.renderer.GetActiveCamera())
+        top.InteractiveOff()
+        pl.ren_win.SetNumberOfLayers(2)
+        pl.ren_win.AddRenderer(top)
+        for actor in [shell] + blobs:                 # the radio sources keep their depth order with the shell
+            pl.renderer.RemoveActor(actor)
+            top.AddActor(actor)
     # coronagraph planes only in a view from their own spacecraft
     for inst in IMAGES_OF.get(owner, ()):
         if on[inst]:
