@@ -322,3 +322,49 @@ def test_auto_t_ref_skips_a_frame_with_another_binning_and_falls_back_when_nothi
     monkeypatch.setattr(G, "sunpy", NS(map=NS(Map=lambda d, m: NS(data=d))), raising=False)
     t, rec = G.auto_t_ref(fr, {}, ("cor2a",), (28.0, -14.0), t0)
     assert t == "2024-05-09T18:32:00" and rec["method"] == "fallback"
+
+
+def _obs(*lons):
+    return {n: [np.cos(np.radians(a)), np.sin(np.radians(a)), 0.0] for n, a in lons}
+
+
+def test_one_view_or_close_observers_tie_the_direction_to_the_source_region():
+    one = G.direction_limit(_obs(("cor1a", 10)))                                # 9 May 2024, COR1-A alone
+    assert one["why"] == "single viewpoint" and one["cone_deg"] == 15.0 and one["separation_deg"] == 0.0
+    assert one["text"] == "direction constrained by the source region (single viewpoint)"
+    close = G.direction_limit(_obs(("c2", 0), ("cor1a", 12), ("cor2a", 12)), cone=0)   # SOHO and STEREO-A 12 deg apart
+    assert close["cone_deg"] == 0 and close["separation_deg"] == pytest.approx(12.0) and "within 12 deg" in close["why"]
+    assert G.direction_limit(_obs(("c2", 0), ("cor1a", 31))) is None                # at 30 deg and more the fit stays free
+    assert G.direction_limit(_obs(("c2", 0), ("cor1a", 150), ("cor1b", -150))) is None   # 2013-10-25, three views
+
+
+def test_the_cone_narrows_the_direction_bounds_around_the_flare():
+    flare = (28.0, -14.0)
+    assert G.bounds(flare)[3:5] == [(-12.0, 68.0), (-49.0, 21.0)]                  # free
+    assert G.bounds(flare, cone=15)[3:5] == [(13.0, 43.0), (-29.0, 1.0)]
+    assert G.bounds(flare, cone=90)[3:5] == G.bounds(flare)[3:5]                    # never wider than the free bounds
+    assert len(G.bounds(flare, fix_direction=True)) == 4
+
+
+def test_a_direction_at_the_edge_of_the_cone_is_not_a_poor_fit_but_is_recorded():
+    shell = dict(height=5.5, kappa=0.4, alpha_deg=25.0, lon_stonyhurst=-109.0, lat_deg=-6.0, tilt_pythea_deg=-30.0)
+    out = {"t_ref": dict(shell, time="2024-05-09T18:06:00", iou={"cor1a": 0.9}),
+           "t_out": dict(shell, height=1.77, time="2024-05-09T17:32:00"),
+           "fit": dict(height_t_out=1.77, assumed=True, note="kinematic assumption")}
+    assert any("lon_stonyhurst" in w for w in G.quality(out, (-69.0, -6.0)))        # free fit at its bound is poor
+    out["direction"] = dict(G.direction_limit(_obs(("cor1a", 10))), constrained=True, flare=[-69.0, -6.0])
+    assert G.quality(out, (-69.0, -6.0)) == []                                      # a prior, not a limit of the data
+    rec = G.config_update(out, (-69.0, -6.0), ("cor1a",))["gcs_fit"]
+    assert rec["direction_constraint"]["why"] == "single viewpoint" and rec["fixed"] == []
+    out["direction"]["cone_deg"] = 0.0
+    assert G.config_update(out, (-69.0, -6.0), ("cor1a",))["gcs_fit"]["fixed"] == ["lon_stonyhurst", "lat_deg"]
+
+
+def test_the_commands_pass_the_direction_cone(tmp_path, monkeypatch):
+    main(["--home", str(tmp_path), "init"])
+    seen = {}
+    monkeypatch.setattr(G, "fit", lambda *a, **kw: (seen.update(kw), 1 / 0)[1])
+    for args, want in ((["gcs"], 15.0), (["gcs", "--direction-cone", "0"], 0.0), (["gcs", "--direction-cone", "8"], 8.0)):
+        with pytest.raises(ZeroDivisionError):
+            main(["--home", str(tmp_path), *args])
+        assert seen["direction_cone"] == want

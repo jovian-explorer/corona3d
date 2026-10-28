@@ -42,6 +42,8 @@ TIE_IOU = 0.02                                         # two fits whose mean IoU
 DEV_AREA = 3.0                                         # R_sun^2: an envelope this large counts as a developed CME (t_ref choice)
 DEV_MARGIN = 0.2                                       # R_sun: ... when its front is this far inside the outer edge of the field
 SCAN_MIN = 150.0                                       # the automatic t_ref is searched up to this many minutes after t_out
+MIN_SEP = 30.0                                         # deg: views whose observers are closer than this cannot fix the direction
+CONE = 15.0                                            # deg: default half-width of the direction cone around the flare site
 BASE_MIN = 10.0                                        # base frame: the last frame at or before onset minus this many minutes
 
 
@@ -128,10 +130,31 @@ def view_lines(rec):
     return L
 
 
-def bounds(flare, fix_direction=False):
-    """Bounds of the optimised parameters: height, kappa, alpha, [lon, lat unless fixed], tilt."""
+def observer_separation(xyz):
+    """Largest angle in degrees between any two observers, given their Cartesian positions (0 for one view)."""
+    v = [np.asarray(x, float) / np.linalg.norm(x) for x in xyz]
+    return max([float(np.degrees(np.arccos(np.clip(a @ b, -1, 1)))) for i, a in enumerate(v) for b in v[i + 1:]] or [0.0])
+
+
+def direction_limit(xyz, cone=CONE, min_sep=MIN_SEP):
+    """Whether the direction must be tied to the source region (Thernisien et al. 2011): true for one view or
+    when the observers are closer than `min_sep` deg. `xyz` maps each view to its observer position. Returns None
+    (free direction) or dict(cone_deg, separation_deg, views, why, text); cone 0 means the direction is fixed at
+    the flare site."""
+    sep = observer_separation(list(xyz.values()))
+    if len(xyz) > 1 and sep >= min_sep:
+        return None
+    why = "single viewpoint" if len(xyz) == 1 else f"viewpoints within {sep:.0f} deg, below {min_sep:g} deg"
+    return dict(cone_deg=float(cone), separation_deg=round(sep, 1), views=list(xyz), why=why,
+                text=f"direction constrained by the source region ({why})")
+
+
+def bounds(flare, fix_direction=False, cone=None):
+    """Bounds of the optimised parameters: height, kappa, alpha, [lon, lat unless fixed], tilt. `cone` (deg)
+    narrows the direction to the flare site plus or minus the cone."""
+    dl, db = (40.0, 35.0) if not cone else (min(cone, 40.0), min(cone, 35.0))
     return [(1.5, 15.0), (0.1, 0.8), (0.0, 60.0)] + ([] if fix_direction else
-            [(flare[0] - 40, flare[0] + 40), (flare[1] - 35, flare[1] + 35)]) + [(-90.0, 90.0)]
+            [(flare[0] - dl, flare[0] + dl), (flare[1] - db, flare[1] + db)]) + [(-90.0, 90.0)]
 
 
 def quality(out, flare, fix_direction=False, iou_min=IOU_MIN):
@@ -139,6 +162,8 @@ def quality(out, flare, fix_direction=False, iou_min=IOU_MIN):
     over the instruments is below iou_min, when no instrument gave an IoU, or when a fitted
     parameter lies within 0.5 % of its range from a bound of the optimisation."""
     t, why = out["t_ref"], []
+    tied = bool((out.get("direction") or {}).get("constrained"))   # a prior from the source region, not a limit of the data
+    fix_direction = fix_direction or tied
     iou = t.get("iou") or {}
     if not iou:
         why.append("no instrument had an envelope")
@@ -425,7 +450,7 @@ def auto_t_ref(fr, base, keys, flare, t_out, running=None):
 
 def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=None, previous=None,
         running=None, height_out=None, height_note=None, drop_poor_views=True, iou_min=IOU_MIN,
-        onset=None, base_minutes=BASE_MIN):
+        onset=None, base_minutes=BASE_MIN, direction_cone=CONE):
     """Two-step fit of a CME from the images in the folder wl; returns the result dictionary
     (keys t_ref, t_out, height_time, fit). `t_ref` None: chosen from the images (auto_t_ref). `previous` is an earlier result whose step 1 is reused,
     `running` the minutes of a running difference (default: difference from the first frame), and
@@ -433,7 +458,9 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     With `drop_poor_views` a view whose IoU is far below the others is left out and the fit repeated
     (see check_views); the result then has the key `view_check` with both fits. The base frame is the
     last frame of each programme at or before `onset` (default t_out) minus `base_minutes`, recorded in
-    the key `base` of the result."""
+    the key `base` of the result. With one view, or views whose observers are closer than MIN_SEP degrees,
+    the direction is not free: it is fixed at the flare site (`direction_cone` 0) or bounded within that many
+    degrees of it (key `direction` of the result)."""
     _load()
     flare = tuple(flare)
     fr = {k: frames_of(wl, k) for k in keys}
@@ -461,11 +488,19 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
         V = views_at(fr, base, tr, keys, flare, running)
         if not V:
             raise SystemExit(f"no CME envelope in any of {keys} within 6 min of {t_ref}; check the times and --flare")
-        full = (lambda q: [q[0], q[1], q[2], flare[0], flare[1], q[3]]) if fix_direction else list
+        obs = {k: next(m for (kk, _), m in base.items() if kk == k).observer_coordinate
+                   .transform_to(frames.HeliographicStonyhurst).cartesian.xyz.value for k in keys}
+
+        def limit(vs):
+            return None if fix_direction else direction_limit({k: obs[k] for k in vs}, direction_cone)
 
         def solve(vs):
+            lim = limit(vs)
+            fixed = fix_direction or (lim is not None and lim["cone_deg"] <= 0)
+            full = (lambda q: [q[0], q[1], q[2], flare[0], flare[1], q[3]]) if fixed else list
+            cone = lim["cone_deg"] if lim else None
             cost = lambda q: 1.0 if q[1] >= 0.95 else 1.0 - np.mean([v.iou(shell(full(q), t_ref)) for _, v in vs.values()])
-            return full(list(differential_evolution(cost, bounds(flare, fix_direction), popsize=12, maxiter=60, tol=1e-4,
+            return full(list(differential_evolution(cost, bounds(flare, fixed, cone), popsize=12, maxiter=60, tol=1e-4,
                                                     seed=3, polish=True).x))
 
         score = lambda vs, q: {k: float(v.iou(shell(q, t_ref))) for k, (_, v) in vs.items()}
@@ -474,11 +509,15 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
         for line in view_lines(rec):
             print("views:", line)
     keys = tuple(V)
+    lim = None if previous else limit(V)
     out = {"base": base_rec, "views_used": list(keys),
            "t_ref": dict(zip(KEYS, [round(float(v), 3) for v in q24]), time=t_ref,
                          iou={k: round(float(v.iou(shell(q24, t_ref))), 3) for k, (_, v) in V.items()})}
     if rec:
         out["view_check"] = rec
+    if lim:
+        out["direction"] = dict(lim, constrained=True, flare=list(flare))
+        print("direction:", lim["text"], f"(cone {lim['cone_deg']:g} deg around the flare site)")
     if choice:
         out["t_ref_choice"] = choice
     print("step 1:", out["t_ref"])
@@ -540,10 +579,12 @@ def config_update(out, flare, keys, fix_direction=False, running=None):
     dropped = (out.get("view_check") or {}).get("dropped", [])
     rec = {"t_ref": out["t_ref"]["time"], "t_out": out["t_out"]["time"], "views": list(out.get("views_used") or [k for k in keys if k not in dropped and k in (out["t_ref"].get("iou") or {k: 1})]),
            "iou": out["t_ref"]["iou"], "flare": list(flare), "running_diff_min": running,
-           "fixed": ["lon_stonyhurst", "lat_deg"] if fix_direction else [],
+           "fixed": ["lon_stonyhurst", "lat_deg"] if fix_direction or (out.get("direction") or {}).get("cone_deg", 1) <= 0 else [],
            "height_t_out": out["fit"]["height_t_out"]}
     if out.get("base"):
         rec["base"] = out["base"]
+    if out.get("direction"):
+        rec["direction_constraint"] = {k: v for k, v in out["direction"].items() if k != "constrained"}
     if out.get("t_ref_choice"):
         rec["t_ref_choice"] = out["t_ref_choice"]
     if dropped:
@@ -573,7 +614,8 @@ def run(home, cfg, a):
     out = fit(a.wl or wl_dir(home), t_ref, t_out, flare, keys, a.fix_direction, a.front, previous,
               a.running_diff, a.height_out, a.height_note,
               drop_poor_views=getattr(a, "drop_poor_views", True), onset=getattr(a, "onset", None),
-              base_minutes=getattr(a, "base_minutes", BASE_MIN))
+              base_minutes=getattr(a, "base_minutes", BASE_MIN),
+              direction_cone=getattr(a, "direction_cone", CONE))
     write_result(home, out, flare, keys, a.fix_direction, a.running_diff)
     if a.t_ref:
         set_wl_time(home, a.t_ref)

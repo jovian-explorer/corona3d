@@ -82,6 +82,9 @@ def _main(argv=None):
     g.add_argument("--base-minutes", type=float, default=10.0, metavar="N",
                     help="the base frame is the last frame at or before onset minus N minutes (default 10), "
                          "so that the fit does not depend on when the download starts")
+    g.add_argument("--direction-cone", type=float, default=15.0, metavar="DEG",
+                    help="with one view, or views whose observers are closer than 30 deg, the direction is not free: "
+                         "bounded within DEG of the flare site (default 15; 0 fixes it at the flare site)")
     g.add_argument("--skip-step1", action="store_true", help="take step 1 from the gcs_fit.json of the working directory")
     ev = sub.add_parser("event", help="new, fetch, radio-interval, gcs, and render for an event, with a report",
                         description="Runs every step for one event in the working directory and writes event_report.md; "
@@ -115,6 +118,9 @@ def _main(argv=None):
     ev.add_argument("--base-minutes", type=float, default=10.0, metavar="N",
                     help="the base frame is the last frame at or before onset minus N minutes (default 10), "
                          "so that the fit does not depend on when the download starts")
+    ev.add_argument("--direction-cone", type=float, default=15.0, metavar="DEG",
+                    help="with one view, or views whose observers are closer than 30 deg, the direction is not free: "
+                         "bounded within DEG of the flare site (default 15; 0 fixes it at the flare site)")
     ev.add_argument("--radio-search", type=float, default=10.0, metavar="MINUTES",
                     help="radio images are searched within MINUTES of --time (default 10)")
     ev.add_argument("--force", action="store_true", help="repeat the downloads, the fit, and the figures")

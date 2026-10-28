@@ -113,7 +113,8 @@ def fit_step(h, cfg, a, flare, views, log):
         try:
             out = gcs.fit(wl, t_ref, t_out, flare, views, fixed, None, None, None, a.height_out, a.height_note,
                           drop_poor_views=getattr(a, "drop_poor_views", True), iou_min=a.iou_min,
-                          onset=getattr(a, "onset", None), base_minutes=getattr(a, "base_minutes", gcs.BASE_MIN))
+                          onset=getattr(a, "onset", None), base_minutes=getattr(a, "base_minutes", gcs.BASE_MIN),
+                          direction_cone=getattr(a, "direction_cone", gcs.CONE))
         except (SystemExit, Exception) as e:                     # SystemExit: the fit found no envelope or front
             attempts.append(dict(mode=name, status="failed", why=[str(e) or type(e).__name__]))
             log(f"gcs: {name} fit failed ({attempts[-1]['why'][0]})")
@@ -121,7 +122,7 @@ def fit_step(h, cfg, a, flare, views, log):
         why = gcs.quality(out, flare, fixed, a.iou_min)
         m = gcs.mean_iou(out)
         attempts.append(dict(mode=name, status="poor" if why else "good", why=why, view_check=out.get("view_check"),
-                             views=out.get("views_used"), dropped=(out.get("view_check") or {}).get("dropped", []),
+                             views=out.get("views_used"), direction=out.get("direction"), dropped=(out.get("view_check") or {}).get("dropped", []),
                              mean_iou=None if m is None else round(m, 3)))
         log(f"gcs: {name} fit (views {', '.join(out.get('views_used') or [])}) "
             f"{'poor: ' + '; '.join(why) if why else 'accepted'}")
@@ -354,7 +355,15 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
                             f"extrapolated from the front in {g['front']} ({g['n_frames']} frames, {g['speed_km_s']:g} km/s).")
         else:
             assumed.append(f"The apex height at {g['t_out']} is {g['height_t_out']:g} R_sun, given by hand: {g.get('height_note', '')}")
-        if g["fixed"]:
+        dc = g.get("direction_constraint")
+        if dc:
+            where = (f"held at the flare site (Stonyhurst longitude {flare[0]:g} deg, latitude {flare[1]:g} deg)" if dc["cone_deg"] <= 0
+                     else f"limited to {dc['cone_deg']:g} deg around the flare site (Stonyhurst longitude {flare[0]:g} deg, "
+                          f"latitude {flare[1]:g} deg)")
+            assumed.append(f"{dc['text'][0].upper() + dc['text'][1:]}: the shell axis is {where}, because a fit to "
+                           f"{', '.join(dc['views'])} cannot determine the direction along the line of sight "
+                           f"(Thernisien et al. 2011; option --direction-cone).")
+        elif g["fixed"]:
             assumed.append(f"The shell axis is held at the flare site (Stonyhurst longitude {flare[0]:g} deg, latitude "
                            f"{flare[1]:g} deg), "
                            + ("because the fixed-direction fit was requested." if a.fit == "fixed" else
@@ -410,6 +419,8 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
         for t in fit["attempts"]:
             used = f"; views used: {', '.join(t['views'])}" if t.get("views") else ""
             L.append(f"- {t['mode']} fit: {t['status']}" + (f" ({'; '.join(t['why'])})" if t["why"] else "") + used + ".")
+            if t.get("direction"):
+                L.append(f"  - {t['direction']['text']}; cone {t['direction']['cone_deg']:g} deg around the flare site.")
             L += [f"  - {x}" for x in gcs.view_lines(t.get("view_check"))]
         if a.fit == "auto":
             names = [t["mode"] for t in fit["attempts"]]
