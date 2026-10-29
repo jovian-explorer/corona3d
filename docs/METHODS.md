@@ -4,7 +4,7 @@ This document describes how corona3d computes every element of its reconstructio
 
 ## 1. Overview
 
-The interaction of a coronal mass ejection (CME) with the surrounding corona depends on quantities that vary in all three dimensions. The electron density sets the height at which a given radio frequency is emitted, the magnetic field and the density together set the Alfvén speed that a shock must exceed, and the topology of the field decides whether accelerated electrons escape along open field or remain on closed loops. Morosan et al. (2022) brought these quantities together in a three-dimensional reconstruction of the CME of 2013 October 25, which combines a magnetohydrodynamic (MHD) model of the corona, a graduated cylindrical shell (GCS) of the CME, and the positions of herringbone radio sources, seen from Earth, from above the solar north pole, and from the Solar Terrestrial Relations Observatory B (STEREO-B). Such reconstructions, however, have so far been made by hand for single events, with steps and inputs that are rarely available in a form that can be repeated for another event, so that the relation between the shock, the coronal field, and the radio sources remains poorly quantified for most events. corona3d is a package that we developed to make every step of such a reconstruction an objective and reproducible computation from public data for any event, namely the MHD model of Predictive Science Inc. (PSI) rendered in three dimensions, a GCS shell fitted to coronagraph images, the white-light images of the Large Angle and Spectrometric Coronagraph (LASCO) C2 and of the STEREO coronagraphs COR1 and COR2, and radio sources measured in radio images and placed at the heights of a coronal density model on the side of the plane of the sky that faces the observer. Every element is a layer that can be switched on or off (Sections 3 to 9), and the shell is fitted as described in Section 7. Moreover, Section 10 describes how these steps are run for an event given only by its time and flare position, and Section 11 describes the checks of the code and the validation on the event of 2013 October 25, for which the result of corona3d is compared with the reconstruction of Morosan et al. (2022).
+The interaction of a coronal mass ejection (CME) with the surrounding corona depends on quantities that vary in all three dimensions. The electron density sets the height at which a given radio frequency is emitted, the magnetic field and the density together set the Alfvén speed that a shock must exceed, and the topology of the field decides whether accelerated electrons escape along open field or remain on closed loops. Morosan et al. (2022) brought these quantities together in a three-dimensional reconstruction of the CME of 2013 October 25, which combines a magnetohydrodynamic (MHD) model of the corona, a graduated cylindrical shell (GCS) of the CME, and the positions of herringbone radio sources, seen from Earth, from above the solar north pole, and from the Solar Terrestrial Relations Observatory B (STEREO-B). Such reconstructions, however, have so far been made by hand for single events, with steps and inputs that are rarely available in a form that can be repeated for another event, so that the relation between the shock, the coronal field, and the radio sources remains poorly quantified for most events. corona3d is a package that we developed to make every step of such a reconstruction an objective and reproducible computation from public data for any event, namely the MHD model of Predictive Science Inc. (PSI) rendered in three dimensions, a GCS shell fitted to coronagraph images, the white-light images of the Large Angle and Spectrometric Coronagraph (LASCO) C2 and of the STEREO coronagraphs COR1 and COR2, and radio sources measured in radio images and placed at the heights of a coronal density model on the side of the plane of the sky that faces the observer. Every element is a layer that can be switched on or off (Sections 3 to 9), and the shell is fitted as described in Section 7. Moreover, Section 10 describes how these steps are run for an event given only by its time and flare position, and Section 11 describes the checks of the code and the validation on the event of 2013 October 25, for which the result of corona3d is compared with the reconstruction of Morosan et al. (2022). Beyond the figure, Sections 12 to 15 describe the physical analysis of the reconstruction: the Mach numbers and the shock geometry of the CME shell in the coronal model, the speeds of the shell and of the radio sources, the range of the radio heights over several density models, the circular polarisation of the radio sources, and the apex height measured in EUV images at the time of the burst.
 
 All positions are expressed in solar radii (R⊙) in one of two frames (Section 6). The model, the field lines, the shell, and the radio sources are placed in Heliographic Carrington Cartesian coordinates, whereas an image of an observer is described by the sky-plane axes of that observer.
 
@@ -196,7 +196,7 @@ The point is taken on the line of sight of the observed position, on the side of
 
 $$ Z = +\sqrt{r^{2} - X^{2} - Y^{2}}, $$
 
-so that $X$ and $Y$ are kept exactly. A position that lies farther from Sun centre than its height, $X^{2}+Y^{2}>r^{2}$, cannot be placed at that height, and it is therefore kept in the plane of the sky with a printed warning. The heights follow the Newkirk model and not the density of the MHD model, so that a source and the density surface locate the same plasma frequency at different heights wherever the two density models differ. The scattering of radio waves in the corona, which displaces observed sources outward, is not corrected. The sources are drawn as spheres coloured by frequency.
+so that $X$ and $Y$ are kept exactly. A position that lies farther from Sun centre than its height, $X^{2}+Y^{2}>r^{2}$, cannot be placed at that height, and it is therefore kept in the plane of the sky with a printed warning. The heights follow the Newkirk model and not the density of the MHD model, so that a source and the density surface locate the same plasma frequency at different heights wherever the two density models differ. The scattering of radio waves in the corona, which displaces observed sources outward, is not corrected. The sources are drawn as spheres coloured by frequency. The heights of the same positions in other density models, including the MHD density itself, and their range are given by `corona3d shock` (Section 13).
 
 ## 9. Coronagraph images (layers `c2`, `cor1`, and `cor2`)
 
@@ -244,6 +244,80 @@ corona3d is validated in two ways. The offline tests check each step of the code
 
 With `CORONA3D_ONLINE=1`, the online test also downloads the public data of 2013 October 25 and draws both figures of the README. The comparison of this validation case with the published reconstruction, together with the differences that remain because some of its inputs are not public, is described in Section 2 above and in Section 11 of [USER_GUIDE.md](USER_GUIDE.md).
 
+## 12. Shock diagnostics of the CME shell (`corona3d shock`)
+
+Whether a CME drives a shock, and how strong that shock becomes, depends on the speed of the CME front relative to the characteristic speeds of the corona ahead of it, and these speeds vary strongly over the surface of the CME, since the front meets open and closed field, dense streamers and tenuous coronal holes at the same time. The command `corona3d shock` therefore evaluates the Mach numbers and the shock geometry at every point of the GCS shell and at the radio sources. The steady MAS/MAST run contains no CME, so that the plasma it gives at a point of the shell is the undisturbed (upstream) corona into which the shell advances. The shell is used as the surface of the shock, which assumes that the shock lies close to the CME front at these low heights; a stand-off distance is not added.
+
+### 12.1 Upstream plasma
+
+Besides the density and the field (Section 3), the command reads the temperature (`t002`) and the three components of the flow (`vr002`, `vt002`, `vp002`) of the same run, which it downloads when they are missing (`corona3d fetch --model-extra`). The MAS code units of these quantities follow from those of the field and the density: the speed unit is $v_0 = B_0/\sqrt{4\pi n_0 m_p} = 481.37\ \mathrm{km\,s^{-1}}$, and the temperature unit is $T_0 = m_p v_0^2/k_B = B_0^2/(4\pi n_0 k_B) = 2.807\times10^{7}$ K, with $n_0 = 10^{8}\ \mathrm{cm^{-3}}$ and $B_0 = 2.2068914$ G. On the run of the validation event the pressure, the density, and the temperature of the files satisfy $p = 2\rho T$ in code units to within $10^{-7}$, which shows that the run holds electrons and protons at one temperature, and the unit gives about 1.2 MK at 1.5 R⊙. The Alfvén speed is computed as in Section 3, with the density chosen by `va_density`, and the sound speed is
+
+$$ c_s = \sqrt{\frac{\gamma\, p}{\rho}} = \sqrt{\frac{2\gamma\, k_B T}{m_p}}, \qquad \gamma = 5/3, $$
+
+since $p = 2 n k_B T$ and $\rho = n m_p$. The sound speed does not depend on `density_scale`, whereas the Alfvén speed, and with it the Alfvén Mach number, changes by $\sqrt{2}$ between the two choices of `va_density`. The magnetic field is converted from its spherical components to Carrington Cartesian components at each point, and the model rotation `model_dlon` is applied to positions and vectors alike.
+
+### 12.2 Normal, shock angle, and fast-magnetosonic speed
+
+The outward normal $\hat{\mathbf{n}}$ of the shell is computed at every vertex from the tangents along its axis and around its cross-section, and it points away from the centre of the cross-section. The angle between the upstream field and the normal,
+
+$$ \theta_{Bn} = \arccos\frac{|\mathbf{B}\cdot\hat{\mathbf{n}}|}{|\mathbf{B}|}, \qquad 0^\circ \le \theta_{Bn} \le 90^\circ, $$
+
+separates quasi-perpendicular ($\theta_{Bn} > 45^\circ$) from quasi-parallel regions of the shock (Treumann 2009), and the threshold is the key `shock.quasi_perp_deg`. The speed of a fast-magnetosonic wave that propagates along the normal is (Priest 2014)
+
+$$ v_f^2 = \tfrac12\left[v_A^2 + c_s^2 + \sqrt{(v_A^2 + c_s^2)^2 - 4 v_A^2 c_s^2 \cos^2\theta_{Bn}}\right], $$
+
+which equals $\sqrt{v_A^2 + c_s^2}$ at a perpendicular shock and the larger of $v_A$ and $c_s$ at a parallel one.
+
+### 12.3 Speed of the shell
+
+With a fixed aspect ratio and half-angle, every length of the GCS shell is proportional to its apex height $h$, and its legs start at Sun centre, so that the shell expands self-similarly about Sun centre (Thernisien 2011). A point $\mathbf{x}$ of the shell therefore moves with the velocity $(\dot h/h)\,\mathbf{x}$, and its speed along the normal, relative to the upstream flow $\mathbf{u}$ of the run, is
+
+$$ V_n = \frac{\dot h}{h}\,(\mathbf{x}\cdot\hat{\mathbf{n}}) - \mathbf{u}\cdot\hat{\mathbf{n}}. $$
+
+The apex speed $\dot h$ is that of the height-time fit of Section 7.2 (`speed_km_s` of `gcs_fit`), or a speed given with `--speed` and `--speed-note`, which is then recorded as assumed. The normal speed equals $\dot h$ at the apex, and it decreases towards the flanks in proportion to $\mathbf{x}\cdot\hat{\mathbf{n}}$, so that the flank speeds are set by the geometry of the fitted shell and by the assumption of self-similar expansion; a CME that expands laterally faster than this, as is often observed early in an eruption, has flank speeds above those of the model. The half-width of the shell, its largest distance from the axis, grows at $\dot h\,w/h$, and the summary gives this lateral speed. The side of the shell that faces the Sun has $V_n \le 0$, does not advance into the corona, and is left without Mach numbers.
+
+### 12.4 Mach numbers and summaries
+
+The Alfvén, fast-magnetosonic, and sonic Mach numbers are
+
+$$ M_A = \frac{V_n}{v_A}, \qquad M_f = \frac{V_n}{v_f}, \qquad M_s = \frac{V_n}{c_s}, $$
+
+at every advancing point. The points are grouped by the angle between their normal and the axis of the CME, the nose within `shock.nose_deg` = 30° and the flanks beyond `shock.flank_deg` = 60°, and by the field line through each point, traced with the tracer of Section 5.1 and classed as open, closed, or undetermined. The summary gives the apex values and, for the nose, the flanks, and the points on closed and on open field, the medians and extremes of $V_n$, $v_A$, $v_f$, $\theta_{Bn}$, $M_A$, and $M_f$, together with the fraction of quasi-perpendicular points. The analysis uses a finer shell than the figure (`shock.mesh`), and points below `shock.r_min` = 1.02 R⊙ are left out.
+
+At each radio source (Section 8) the upstream plasma is sampled at the deprojected position of the source, and the shell, scaled self-similarly to the time of the source with the apex speed, gives the point nearest to the source, its normal, and its normal speed, which does not change with the scaling. The table records the distance of the source from the shell and whether the source lies ahead of or behind the front ($\hat{\mathbf{n}}\cdot(\mathbf{q}-\mathbf{x}) < 0$ for a source $\mathbf{q}$ behind it), so that the Mach number of a source inside the shell is not mistaken for that of the shock ahead of it.
+
+The command writes `shock_shell.csv` (one row per point of the shell), `shock_radio.csv` (one row per radio position), `radio_tracks.csv`, `shock.npz`, `shock_summary.json`, and `shock_summary.md` to the folder `analysis/`, and the section *Shock diagnostics* of `event_report.md` when the report exists. `corona3d render --shell-color mach_f` (or `mach_a`, `theta_bn`, `vn`, `va`) colours the drawn shell by the same quantities, with `--shell-clim` for the colour limits, and the points that do not advance are drawn in grey.
+
+### 12.5 Speeds of the radio sources
+
+For every instrument and frequency, a straight line is fitted to the three-dimensional positions of the centroids against time, and the length of its velocity vector, with the standard error propagated from the fit, is the speed of the source in three dimensions; the same fit to the sky-plane positions gives the projected speed. Since every centroid of one frequency is placed at the same height of the density model, the radial component of this motion is zero by construction, and the speed describes the motion of the emission site over the plasma level, not the radial speed of an electron beam or of the shock.
+
+### 12.6 Validation on the event of 2013 October 25
+
+The offline tests check the speeds against their analytic limits, the normals against those of a tube, the apex speed of a PyThea shell, the self-similar scaling of its half-width, the sampling of a synthetic run with a dipole field, a uniform temperature, and a radial flow, and the Mach numbers against $V_n/v_A$ point by point (`tests/test_shock.py`). For the validation event, the shell of the stored fit (apex height 1.931 R⊙ at 15:00 UT, 1039 km s⁻¹) gives an Alfvén speed of 212 km s⁻¹ and $M_A$ = 4.8 at the apex, where the field is open and $\theta_{Bn}$ = 4°, whereas the flanks advance at a median of 228 km s⁻¹ and reach a median $M_A$ of only 1.3 (quasi-perpendicular fraction 0.81). With the apex height measured in the EUVI images (Section 15), 1.50 ± 0.04 R⊙ at 15:00 UT, the same shape gives $M_A$ = 6.6 at the apex and a median $M_A$ of 3.2 and $M_f$ of 2.2 on the closed field that the shell meets. The values at the radio sources are listed in Section 11 of USER_GUIDE.md, together with those of the earlier reconstruction.
+
+## 13. Height range of the radio sources
+
+The height of a radio source follows from a density model, and the corona can be denser or more tenuous than any one model, so that the height carries an uncertainty that the radio image alone cannot remove. `corona3d shock` therefore computes the height of every radio position in each model of `shock.height_models` and gives their range. The models are the $K$-fold Newkirk (1961) model (`newkirk1`, `newkirk2`, `newkirk4`, and `newkirk6`, Section 8.2), the equatorial background corona of Saito et al. (1977),
+
+$$ n_e(r) = 1.36\times10^{6}\, r^{-2.14} + 1.68\times10^{8}\, r^{-6.13}\ \mathrm{cm^{-3}}, $$
+
+solved numerically for the plasma level, and the scaled density of the MAS/MAST run itself (`mas`). For the last, the density is sampled along the line of sight of the observed position in steps of 0.005 R⊙, from 10 R⊙ towards the plane of the sky (or towards the solar disc for a position on the disc), and the height is the first point at which the density reaches the plasma level, interpolated in $\log n_e$; a line of sight that does not reach it on the side facing the observer gives no MAS height. All models use emission at the second harmonic, as the radio layer does. The columns `r_<model>`, `r_min`, and `r_max` of `shock_radio.csv` hold the heights and their range, and `x_min` to `z_max` the end points of the range on the line of sight, which `corona3d render --radio --radio-height-range` draws as dark segments through the sources. For the 150.9 MHz sources of 2013 October 25 the heights are 1.15 R⊙ (Saito), 1.34 to 1.77 R⊙ (Newkirk ×1 to ×6, 1.647 R⊙ for ×4), and 1.13 to 1.30 R⊙ in the MAS density, so that the run places these sources lower than the four-fold Newkirk model by 0.35 to 0.52 R⊙.
+
+## 14. Circular polarisation of the radio sources
+
+The degree of circular polarisation of a burst indicates whether it is emitted at the fundamental or at the harmonic of the plasma frequency, since fundamental emission is usually strongly polarised and harmonic emission weakly. The NRH files delivered by the Radio Solar Database hold the Stokes V images of each integration in the column `STOKESV` of the same file as Stokes I, and a separate file `nrh2_..._v.fts` beside the `_i` file is also read. For every NRH position of the radio table, the image of the same frame gives
+
+$$ \frac{V}{I}\bigg|_{\rm source} = \frac{\sum V}{\sum I}, \qquad \frac{V}{I}\bigg|_{\rm peak}, $$
+
+where the sums run over the pixels whose Stokes I reaches `level` times the peak, the same pixels that define the centroid (Section 8.1), and the second value is taken at the brightest pixel. The sign is that of the NRH files. A degree of polarisation cannot exceed one in magnitude, and a value $|V/I| > 1$ shows that the Stokes V image holds artefacts larger than the source; such a row is kept in `shock_radio.csv` with `dcp_valid` false and left out of the summary. The files of 2013 October 25 at hand hold Stokes V, and at 150.9 MHz the degree is between −0.02 and +0.04 at the five positions, which indicates harmonic emission, whereas at 432 MHz the Stokes V image exceeds the Stokes I peak by a factor of up to 4.6 and two of the three values are unphysical.
+
+## 15. EUV images and the apex height at early times
+
+A radio burst often begins before the CME is visible in the coronagraphs, so that the apex height at the time of the burst is extrapolated from later frames (Section 7.2), whereas the extreme-ultraviolet (EUV) images of the low corona show the CME and the EUV front at that time. `corona3d fetch --euv` downloads the images of the Atmospheric Imaging Assembly (AIA; Lemen et al. 2012) of the Solar Dynamics Observatory at 193 Å and 211 Å and of the Extreme Ultraviolet Imager (EUVI; Wuelser et al. 2004) of the STEREO spacecraft of the event at 195 Å from the Virtual Solar Observatory, within `euv_window` (by default from 20 min before to 15 min after the event time) and one image every `euv_sample_min` = 5 min.
+
+With `corona3d gcs --euv` (or `corona3d event --euv`), the apex height at t_out is measured in these images instead of being extrapolated, while the shape of the shell (aspect ratio, half-angle, direction, and tilt) is kept from the white-light fit. For every frame of the first EUV view within 10 min of t_out (AIA 193 Å when present, with the frames of the other views within 90 s), the envelope is formed as for the coronagraphs, in the annulus above the limb from 1.02 R⊙ to 1.3 R⊙ (AIA) or 1.7 R⊙ (EUVI), so that the on-disc part of the EUV wave is left out, and the apex height is chosen on a grid of 0.01 R⊙ from 1.05 to 3 R⊙ so that the mean IoU of the projected shell with the envelopes is largest. A frame whose best height lies beyond the outer edge of the EUV field, or at an end of the grid, is not used, because its envelope then constrains only the flanks of the shell. With three or more usable frames, a straight line through their heights gives the height at t_out with the standard error of its intercept and the early speed of the apex. With one or two, the frame nearest to t_out is used and moved to t_out with the speed of the white-light front, and the half-width of the heights whose mean IoU lies within 0.02 of the best is its uncertainty. The EUV height replaces the extrapolated one in `gcs` of `config.json`, the extrapolated height is kept as `height_t_out_wl`, and the record `euv` of `gcs_fit.json` lists every frame with its height, IoU, and the reason why it was not used. Without `--euv`, no EUV image is read and the fit is unchanged. For 2013 October 25, the EUVI-B frame at 15:01:21 UT gives 1.63 R⊙ (IoU 0.61, 1.60 to 1.68 R⊙), and moved to 15:00 UT at 1108 km s⁻¹ it gives 1.50 ± 0.04 R⊙, below the 1.83 ± 0.61 R⊙ extrapolated from the COR1-B front of the same download, as expected for a CME that accelerates early in its rise; the frame at 15:06:22 UT, whose best height of 2.98 R⊙ lies beyond the EUVI field, was not used. The AIA images could not be obtained from the Virtual Solar Observatory when this was written, so that the AIA path is tested only offline.
+
 ## References
 
 Brueckner, G. E., Howard, R. A., Koomen, M. J., et al. 1995, Solar Physics, 162, 357. https://doi.org/10.1007/BF00733434
@@ -256,6 +330,8 @@ Kerdraon, A., & Delouis, J.-M. 1997, in Coronal Physics from Radio and Space Obs
 
 Kouloumvakos, A., Rodriguez-Garcia, L., Gieseler, J., et al. 2022, Frontiers in Astronomy and Space Sciences, 9, 974137. https://doi.org/10.3389/fspas.2022.974137
 
+Lemen, J. R., Title, A. M., Akin, D. J., et al. 2012, Solar Physics, 275, 17. https://doi.org/10.1007/s11207-011-9776-8
+
 Lionello, R., Linker, J. A., & Mikić, Z. 2009, The Astrophysical Journal, 690, 902. https://doi.org/10.1088/0004-637X/690/1/902
 
 Mikić, Z., Linker, J. A., Schnack, D. D., Lionello, R., & Tarditi, A. 1999, Physics of Plasmas, 6, 2217. https://doi.org/10.1063/1.873474
@@ -266,6 +342,10 @@ Morosan, D. E., Pomoell, J., Kumari, A., Vainio, R., & Kilpua, E. K. J. 2022, As
 
 Newkirk, G., Jr. 1961, The Astrophysical Journal, 133, 983. https://doi.org/10.1086/147104
 
+Priest, E. 2014, Magnetohydrodynamics of the Sun (Cambridge: Cambridge University Press). https://doi.org/10.1017/CBO9781139020732
+
+Saito, K., Poland, A. I., & Munro, R. H. 1977, Solar Physics, 55, 121. https://doi.org/10.1007/BF00150879
+
 Sullivan, C. B., & Kaszynski, A. A. 2019, Journal of Open Source Software, 4, 1450. https://doi.org/10.21105/joss.01450
 
 The SunPy Community, Barnes, W. T., Bobra, M. G., et al. 2020, The Astrophysical Journal, 890, 68. https://doi.org/10.3847/1538-4357/ab4f7a
@@ -274,4 +354,8 @@ Thernisien, A. F. R., Howard, R. A., & Vourlidas, A. 2006, The Astrophysical Jou
 
 Thernisien, A. 2011, The Astrophysical Journal Supplement Series, 194, 33. https://doi.org/10.1088/0067-0049/194/2/33
 
+Treumann, R. A. 2009, The Astronomy and Astrophysics Review, 17, 409. https://doi.org/10.1007/s00159-009-0024-2
+
 Wang, T., Reginald, N. L., Davila, J. M., St. Cyr, O. C., & Thompson, W. T. 2017, Solar Physics, 292, 97. https://doi.org/10.1007/s11207-017-1130-3
+
+Wuelser, J.-P., Lemen, J. R., Tarbell, T. D., et al. 2004, in Telescopes and Instrumentation for Solar Astrophysics, Proc. SPIE, 5171, 111. https://doi.org/10.1117/12.506877

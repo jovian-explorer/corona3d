@@ -1,4 +1,4 @@
-"""corona3d command line: doctor, init, new, fetch, radio-interval, gcs, event, render, export."""
+"""corona3d command line: doctor, init, new, fetch, radio-interval, gcs, event, render, export, shock."""
 import argparse
 import json
 import shutil
@@ -70,8 +70,12 @@ def _main(argv=None):
     n.add_argument("--force", action="store_true", help="replace an existing config.json")
     f = sub.add_parser("fetch", help="download the MAS/MAST run and the white-light images")
     f.add_argument("--model", action="store_true", help="only the MAS/MAST run")
+    f.add_argument("--model-extra", action="store_true",
+                   help="only the temperature and flow files of the run (t002, vr002, vt002, vp002), used by corona3d shock")
     f.add_argument("--wl", action="store_true", help="only the LASCO C2 and STEREO COR1, COR2 images")
     f.add_argument("--cor1a", action="store_true", help="also the STEREO-A COR1 images (for corona3d gcs)")
+    f.add_argument("--euv", action="store_true",
+                   help="only the SDO/AIA 193 and 211 A and STEREO/EUVI 195 A images of euv_window (for corona3d gcs --euv)")
     f.add_argument("--ovro-lwa", action="store_true",
                    help="only the OVRO-LWA images of the radio_images entries (public AWS bucket)")
     f.add_argument("--nrh", action="store_true",
@@ -112,6 +116,11 @@ def _main(argv=None):
                     help="with one view, or views whose observers are closer than 30 deg, the direction is not free: "
                          "bounded within DEG of the flare site (default 15; 0 fixes it at the flare site)")
     g.add_argument("--skip-step1", action="store_true", help="take step 1 from the gcs_fit.json of the working directory")
+    g.add_argument("--euv", action="store_true",
+                    help="measure the apex height at the reconstruction time in the EUV images of data/euv (corona3d fetch "
+                         "--euv) with the shape of the white-light fit, in place of the extrapolated height (both are recorded)")
+    g.add_argument("--euv-views", type=lambda t: t.split(","), metavar="LIST",
+                    help="EUV views for --euv: aia193, aia211, euvi195a, euvi195b (default: aia193 and the EUVI images present)")
     ev = sub.add_parser("event", help="new, fetch, radio-interval, gcs, and render for an event, with a report",
                         description="Runs every step for one event in the working directory and writes event_report.md; "
                                     "steps already done are skipped.")
@@ -152,6 +161,15 @@ def _main(argv=None):
                          "bounded within DEG of the flare site (default 15; 0 fixes it at the flare site)")
     ev.add_argument("--radio-search", type=float, default=10.0, metavar="MINUTES",
                     help="radio images are searched within MINUTES of --time (default 10)")
+    ev.add_argument("--euv", action="store_true",
+                    help="measure the apex height at the reconstruction time in the EUV images of data/euv (corona3d fetch "
+                         "--euv) with the shape of the white-light fit, in place of the extrapolated height (both are recorded)")
+    ev.add_argument("--euv-views", type=lambda t: t.split(","), metavar="LIST",
+                    help="EUV views for --euv: aia193, aia211, euvi195a, euvi195b (default: aia193 and the EUVI images present)")
+    ev.add_argument("--shock", action="store_true",
+                    help="also run corona3d shock (Mach numbers, theta_Bn, speeds, radio height ranges, polarisation), "
+                         "draw the shell coloured by the fast-magnetosonic Mach number, and add the section Shock "
+                         "diagnostics to event_report.md")
     ev.add_argument("--force", action="store_true", help="repeat the downloads, the fit, and the figures")
     r = sub.add_parser("render", help="draw the three-panel figure",
                        epilog="layers: " + ", ".join(LAYERS))
@@ -179,8 +197,25 @@ def _main(argv=None):
                         "to the highest, or over the colour range), or for surface and wl a transfer function such as "
                         "linear or sigmoid; layers: " + ", ".join(OPACITY_KEYS) + " (repeatable)")
     r.add_argument("--contours", action="store_true", help="draw the contours of the last radio image of every frequency")
+    r.add_argument("--shell-color", choices=("mach_a", "mach_f", "theta_bn", "vn", "va"),
+                   help="colour the GCS shell by the Alfven or fast-magnetosonic Mach number, theta_Bn, the normal speed, "
+                        "or the upstream Alfven speed (corona3d shock; needs the apex speed of the fit or --shell-speed)")
+    r.add_argument("--shell-clim", type=floats, metavar="LO,HI", help="colour limits of --shell-color")
+    r.add_argument("--shell-speed", type=float, metavar="KM_S", help="apex speed for --shell-color when the configuration has no fit")
+    r.add_argument("--radio-height-range", action="store_true",
+                   help="draw the range of heights of every radio position over the density models of shock.height_models "
+                        "as a segment along the line of sight")
     r.add_argument("--contour-levels", type=floats, metavar="L1,L2,...",
                    help="contour levels as fractions of the peak of the image, e.g. 0.3,0.5,0.7,0.9 (implies --contours)")
+    sk = sub.add_parser("shock", help="Mach numbers, theta_Bn, and speeds of the CME shell, and heights, speeds, and "
+                        "polarisation of the radio sources",
+                        description="Samples the MAS/MAST corona on the GCS shell and at the radio sources and writes the "
+                                    "tables and summary to the folder --out (method in docs/METHODS.md, Section 12).")
+    sk.add_argument("--speed", type=float, metavar="KM_S", help="apex speed given by hand (default: the height-time fit of corona3d gcs)")
+    sk.add_argument("--speed-note", help="reason for --speed, written into the summary")
+    sk.add_argument("--out", default="analysis", help="output folder, relative to the working directory")
+    sk.add_argument("--no-trace", action="store_true", help="do not trace the field line through every shell point (open or closed)")
+    sk.add_argument("--no-radio", action="store_true", help="leave out the radio sources")
     e = sub.add_parser("export", help="write every enabled layer to data files with a JSON metadata sidecar",
                        epilog="layers: " + ", ".join(LAYERS))
     for k in LAYERS:
@@ -244,9 +279,14 @@ def _main(argv=None):
         return
     if a.cmd == "fetch":
         failed, parts = 0, {}
-        everything = not (a.model or a.wl or a.ovro_lwa or a.nrh)
+        everything = not (a.model or a.wl or a.ovro_lwa or a.nrh or a.model_extra or a.euv)
         if a.model or everything:
             parts["model"] = fetch.model(h, cfg)
+        if a.model_extra:
+            parts["model extra"] = fetch.model(h, cfg, fetch.EXTRA)
+        if a.euv:
+            from . import euv
+            parts["EUV"] = euv.fetch(h, cfg)
         if a.wl or everything:
             parts["white light"] = fetch.whitelight(h, cfg, cor1a=a.cor1a)
         if a.ovro_lwa or everything:
@@ -263,6 +303,15 @@ def _main(argv=None):
     if a.cmd == "gcs":
         from . import gcs
         gcs.run(h, cfg, a)
+        return
+    if a.cmd == "shock":
+        from . import shock
+        if a.speed is not None and not a.speed_note:
+            sys.exit("--speed needs --speed-note, the reason for the assumed speed")
+        if fetch.model(h, cfg, fetch.EXTRA):
+            print("some temperature or flow files failed; the flow is then not subtracted, and without t002 the "
+                  "sound and fast-magnetosonic speeds need shock.temperature_k in config.json")
+        shock.run(h, cfg, a)
         return
     if a.cmd == "export":
         from .exporting import export
@@ -285,6 +334,14 @@ def _main(argv=None):
         params["opacity"] = dict(parse_opacity(t) for t in a.opacity)
         if "wl" in params["opacity"]:
             params["wl_opacity"] = params["opacity"]["wl"]   # replaces a wl_opacity of config.json
+    if a.shell_color:
+        params["shell_color"] = a.shell_color
+        if a.shell_clim:
+            params["shell_clim"] = a.shell_clim
+        if a.shell_speed is not None:
+            params["shock_speed_km_s"] = a.shell_speed
+    if a.radio_height_range:
+        params["radio_height_range"] = True
     if a.contours or a.contour_levels:
         params["radio_images"] = [dict(e, contours=True, **({"contour_levels": a.contour_levels}
                                                             if a.contour_levels else {}))

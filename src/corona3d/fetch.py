@@ -7,14 +7,16 @@ from .paths import model_dir, wl_dir
 
 PSI = "https://www.predsci.com/data/runs/{run}/corona/{var}.hdf"
 VARS = ("rho002", "br002", "bt002", "bp002", "va002")
+EXTRA = ("t002", "vr002", "vt002", "vp002")          # temperature and flow for `corona3d shock` (as mast_model.EXTRA)
 
 
-def model(h, cfg):
-    """Download the five files of the run; returns the number of files that failed."""
+def model(h, cfg, names=VARS):
+    """Download the five files of the run (or the files `names`, such as mast_model.EXTRA for the
+    temperature and flow of the shock diagnostics); returns the number of files that failed."""
     d = model_dir(h, cfg)
     d.mkdir(parents=True, exist_ok=True)
     failed = 0
-    for v in VARS:
+    for v in names:
         f = d / f"{v}.hdf"
         if f.exists():
             print(f"{f.name}: present")

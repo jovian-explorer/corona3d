@@ -564,7 +564,7 @@ def auto_t_ref(fr, base, keys, flare, t_out, running=None):
 
 def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=None, previous=None,
         running=None, height_out=None, height_note=None, drop_poor_views=True, iou_min=IOU_MIN,
-        onset=None, base_minutes=BASE_MIN, direction_cone=CONE):
+        onset=None, base_minutes=BASE_MIN, direction_cone=CONE, euv=None, euv_views=None):
     """Two-step fit of a CME from the images in the folder wl; returns the result dictionary
     (keys t_ref, t_out, height_time, fit). `t_ref` None: chosen from the images (auto_t_ref). `previous` is an earlier result whose step 1 is reused,
     `running` the minutes of a running difference (default: difference from the first frame), and
@@ -574,7 +574,9 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     last frame of each programme at or before `onset` (default t_out) minus `base_minutes`, recorded in
     the key `base` of the result. With one view, or views whose observers are closer than MIN_SEP degrees,
     the direction is not free: it is fixed at the flare site (`direction_cone` 0) or bounded within that many
-    degrees of it (key `direction` of the result)."""
+    degrees of it (key `direction` of the result). With `euv` (a folder of EUV images, corona3d.euv) the apex
+    height at t_out is measured in the EUV images with the shape of step 1 (key `euv` of the result), and it
+    replaces the extrapolated height, which is kept as `height_t_out_wl`."""
     _load()
     flare = tuple(flare)
     fr = {k: frames_of(wl, k) for k in keys}
@@ -679,14 +681,35 @@ def fit(wl, t_ref, t_out, flare=FLARE, keys=VIEWS, fix_direction=False, front=No
     hts = [(t.isoformat(), k, round(r / proj[k], 3), round(a, 2)) for t, r, a in front_profile(rows, FOV[k][1])]
     for h in hts:
         print("  ", h)
-    if len(hts) < 2:
+    euv_rec = None
+    if euv:                                                # the apex height in the EUV images (corona3d.euv)
+        from . import euv as euv_mod
+        v_wl = None
+        if len(hts) >= 2:
+            v_wl = extrapolate([datetime.fromisoformat(t) for t, *_ in hts], [h for _, _, h, _ in hts],
+                               datetime.fromisoformat(t_out))[0] * 695700 / 60
+        euv_rec = euv_mod.height_profile(euv, q24[1:], t_out, flare, euv_views, onset, base_minutes, speed_km_s=v_wl)
+        out["euv"] = euv_rec or dict(error=f"no usable EUV envelope within {euv_mod.EUV_SPAN_MIN:g} min of {t_out} in {euv}")
+        print("EUV:", {k: v for k, v in out["euv"].items() if k not in ("frames", "base")})
+    if len(hts) < 2 and not euv_rec:
         raise SystemExit(f"fewer than two usable fronts in {k}; the height at {t_out} cannot be extrapolated")
+    if len(hts) < 2:                                       # the EUV height alone
+        out["height_time"] = dict(instrument=k, projection=round(proj[k], 3), frames=[dict(time=t, height=h, area_rsun2=a) for t, _, h, a in hts])
+        out["fit"] = dict(speed_rsun_per_min=None, speed_km_s=euv_rec.get("speed_km_s"), height_t_out=euv_rec["height_t_out"],
+                          height_t_out_err=euv_rec["height_t_out_err"], n_frames=len(hts), height_from="euv", height_t_out_wl=None)
+        out["t_out"] = dict(out["t_ref"], height=euv_rec["height_t_out"], time=t_out)
+        out["t_out"].pop("iou")
+        return out
     v, h0, h0_err = extrapolate([datetime.fromisoformat(t) for t, *_ in hts], [h for _, _, h, _ in hts],
                                 datetime.fromisoformat(t_out))
     out["height_time"] = dict(instrument=k, projection=round(proj[k], 3),
                               frames=[dict(time=t, height=h, area_rsun2=a) for t, _, h, a in hts])
     out["fit"] = dict(speed_rsun_per_min=round(v, 4), speed_km_s=round(v * 695700 / 60, 0),
                       height_t_out=round(h0, 3), height_t_out_err=round(h0_err, 3), n_frames=len(hts))
+    if euv_rec:                                            # the EUV height replaces the extrapolated one
+        out["fit"].update(height_from="euv", height_t_out_wl=round(h0, 3), height_t_out_wl_err=round(h0_err, 3),
+                          height_t_out=euv_rec["height_t_out"], height_t_out_err=euv_rec["height_t_out_err"])
+        h0 = euv_rec["height_t_out"]
     out["t_out"] = dict(out["t_ref"], height=round(h0, 3), time=t_out)
     out["t_out"].pop("iou")
     print("step 2:", out["fit"])
@@ -721,6 +744,10 @@ def config_update(out, flare, keys, fix_direction=False, running=None):
         rec.update(height_source="measured", front=out["height_time"]["instrument"],
                    speed_km_s=out["fit"]["speed_km_s"], height_t_out_err=out["fit"]["height_t_out_err"],
                    n_frames=out["fit"]["n_frames"])
+        if out["fit"].get("height_from") == "euv":
+            e = out.get("euv") or {}
+            rec.update(height_from="euv", euv_views=e.get("keys"), euv_method=e.get("method"),
+                       euv_speed_km_s=e.get("speed_km_s"), height_t_out_wl=out["fit"].get("height_t_out_wl"))
     return {"gcs": shell_of(out["t_out"], False), "gcs_wl": shell_of(out["t_ref"], True), "gcs_fit": rec}
 
 
@@ -741,12 +768,24 @@ def run(home, cfg, a):
               a.running_diff, a.height_out, a.height_note,
               drop_poor_views=getattr(a, "drop_poor_views", True), onset=getattr(a, "onset", None),
               base_minutes=getattr(a, "base_minutes", BASE_MIN),
-              direction_cone=getattr(a, "direction_cone", CONE))
+              direction_cone=getattr(a, "direction_cone", CONE),
+              euv=euv_folder(home, a), euv_views=getattr(a, "euv_views", None))
     write_result(home, out, flare, keys, a.fix_direction, a.running_diff)
     if a.t_ref:
         set_wl_time(home, a.t_ref)
     elif out.get("t_ref_choice"):
         set_wl_time(home, out["t_ref"]["time"], "t_ref chosen automatically")
+
+
+def euv_folder(home, a):
+    """The EUV folder of `--euv` (data/euv of the working directory), or None without the option."""
+    if not getattr(a, "euv", False):
+        return None
+    from .euv import euv_dir
+    d = euv_dir(home)
+    if not d.exists() or not any(d.iterdir()):
+        raise SystemExit(f"--euv: no EUV images in {d}; run corona3d fetch --euv first")
+    return d
 
 
 def write_result(home, out, flare, keys, fix_direction=False, running=None):

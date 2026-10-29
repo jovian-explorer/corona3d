@@ -70,6 +70,55 @@ def clip(lines, r_max):
     return out
 
 
+SHELL_COLOR = {"mach_a": ("M_A", "viridis", (0.0, 4.0)), "mach_f": ("M_f", "viridis", (0.0, 4.0)),
+               "theta_bn": (r"$	heta_{Bn}$ (deg)", "coolwarm", (0.0, 90.0)), "vn": ("$V_n$ (km/s)", "magma", None),
+               "va": (r"$v_A$ (km/s)", "Spectral_r", None)}
+
+
+def _model(p, data_root, m):
+    return m if m is not None else mast_model.load(model_dir(data_root, p), density_scale=p["density_scale"],
+                                                   va_density=p["va_density"])
+
+
+def shell_scalars(p, rings, g, data_root, m=None):
+    """(label, values per vertex of the drawn shell, colour map, limits) for `shell_color`: the Alfven or
+    fast-magnetosonic Mach number, theta_Bn, the normal speed, or the Alfven speed of the upstream corona
+    (corona3d.shock). Vertices that do not advance, or lie below shock.r_min, are NaN."""
+    from . import shock
+    key = p["shell_color"]
+    if key not in SHELL_COLOR:
+        raise ValueError(f"shell_color {key!r}: choose from {', '.join(SHELL_COLOR)}")
+    s = shock.settings(p)
+    m = _model(p, data_root, m)
+    mast_model.load_plasma(model_dir(data_root, p), m)
+    v, _, _ = shock.apex_speed(data_root, p, p.get("shock_speed_km_s"), "shock_speed_km_s")
+    pts = rings.reshape(-1, 3)
+    ok = np.linalg.norm(pts, axis=1) > s["r_min"]                  # the legs reach Sun centre
+    d = shock.diagnostics(pts[ok], shock.shell_normals(rings).reshape(-1, 3)[ok],
+                          shock.Plasma(m, p, s["temperature_k"], s["flow"]), v, float(g["height"]), s["gamma"])
+    vals = np.full(len(pts), np.nan)
+    vals[ok] = np.where(d["vn"] > 0, d[key], np.nan) if key == "theta_bn" else d[key]
+    label, cmap, lim = SHELL_COLOR[key]
+    lim = tuple(p.get("shell_clim") or lim or ((0.0, v) if key == "vn" else tuple(p["va_range"])))
+    return label, vals, cmap, lim
+
+
+def height_segments(p, sc, data_root, m=None):
+    """Segments along the line of sight from Earth between the lowest and highest height of every radio
+    position over the density models of shock.height_models (corona3d.heights)."""
+    from . import heights, shock
+    models = shock.settings(p)["height_models"]
+    rows = [(s_["freq"], x, y) for s_ in p["radio_sources"] for x, y in zip(np.atleast_1d(s_["x"]), np.atleast_1d(s_["y"]))
+            if s_.get("unit") != "arcsec"]
+    rows += [(b["freq"], x, y) for b in sc.get("radio_blobs", []) for x, y in zip(b["x"], b["y"])]
+    if not rows:
+        return []
+    f, x, y = (np.array(c, float) for c in zip(*rows))
+    r = heights.ranges(dict(freq_mhz=f, x_rsun=x, y_rsun=y), p, _model(p, data_root, m) if "mas" in models else None, models)
+    return [np.array([[a, b, c], [d, e, g]]) for a, b, c, d, e, g in
+            zip(r["x_min"], r["y_min"], r["z_min"], r["x_max"], r["y_max"], r["z_max"]) if np.isfinite([a, d]).all()]
+
+
 def shell_of(g, p, time):
     return pythea_shell(g["height"], g["kappa"], g["alpha_deg"], g["lon_stonyhurst"], g["lat_deg"],
                         g["tilt_deg"] + 90.0, p["earth"][0], obstime=time,
@@ -111,6 +160,7 @@ def reconstruct(p=None, on=None, data_root="."):
         p = burst_shell(p)
     on = dict(ON, **(on or {}))
     sc = {"times": {"shell": p["time"]}}
+    m = None
     if on["surface"] or on["open"] or on["closed"] or on["streamer"]:
         m = mast_model.load(model_dir(data_root, p), density_scale=p["density_scale"],
                             va_density=p["va_density"])
@@ -137,6 +187,9 @@ def reconstruct(p=None, on=None, data_root="."):
             if p.get("wl_shell"):
                 s = p["wl_shell"]
                 sc["times"]["shell_height"] = f"height {s['height']:g} R_sun" + (", assumed" if s["assumed"] else "")
+    if on["gcs"] and p.get("shell_color"):
+        g = p["gcs_wl"] if sc["times"]["shell"] != p["time"] else p["gcs"]
+        sc["gcs_scalars"] = shell_scalars(p, sc["gcs"], g, data_root, m)
     if on["streamer"]:
         # closed lines threaded by the CME shell: traced from every vertex of the shell above
         # the inner boundary of the model
@@ -194,6 +247,8 @@ def reconstruct(p=None, on=None, data_root="."):
                           f"({cx:+.2f}, {cy:+.2f}) R_sun, at {h:.3f} R_sun")
         if not sc["radio"]:
             print("radio: no radio images and no radio_sources; layer empty")
+        if p.get("radio_height_range") and sc["radio"]:
+            sc["radio_ranges"] = height_segments(p, sc, data_root, m)
     for inst in WL:
         if on[inst]:
             from .whitelight import INSTR, WL_MAX_GAP_MIN, load_plane, utc
@@ -267,7 +322,13 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
             if key == "streamer" and len(lines) > p["streamer_max_lines"]:    # an even subset
                 lines = [lines[i] for i in np.linspace(0, len(lines) - 1, p["streamer_max_lines"]).astype(int)]
             pl.add_mesh(polyline(lines), **kw)
-    if on["gcs"]:
+    if on["gcs"] and sc.get("gcs_scalars"):                # the shell coloured by a shock quantity
+        label, vals, cmap, lim = sc["gcs_scalars"]
+        poly = polyline(list(sc["gcs"]))
+        poly["shock"] = vals
+        shell = pl.add_mesh(poly, scalars="shock", cmap=cmap, clim=lim, nan_color="#b0b0b0", show_scalar_bar=False,
+                            line_width=p["mesh_rings"]["width"], opacity=op["gcs"])
+    elif on["gcs"]:
         shell = pl.add_mesh(polyline(list(sc["gcs"])), color=p["mesh_rings"]["color"],
                             line_width=p["mesh_rings"]["width"], opacity=op["gcs"])
     for f, levels in (sc.get("radio_contours", []) if on["radio"] else []):
@@ -276,6 +337,8 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
             if lines:
                 pl.add_mesh(polyline(lines), color=cm.cool(np.clip((f - 150) / 300, 0, 1))[:3], line_width=4.0,
                             opacity=float(a))
+    if on["radio"] and sc.get("radio_ranges"):             # height range of each source over the density models
+        pl.add_mesh(polyline(sc["radio_ranges"]), color="#303030", line_width=3.0, opacity=0.9)
     blobs = []
     for f, xyz, rgb in (sc.get("radio", []) if on["radio"] else []):
         cloud = pv.PolyData(xyz)
@@ -435,6 +498,12 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
                           cax=cax, orientation="horizontal")
         cb.ax.tick_params(labelsize=12)
         fig.text(0.395, 0.095, r"$v_A$ (km/s)", ha="right", va="center", fontsize=14)
+    if on["gcs"] and sc.get("gcs_scalars"):
+        label, _, cmap, lim = sc["gcs_scalars"]
+        cax = fig.add_axes([0.73, 0.07, 0.18, 0.05])
+        cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(*lim), cmap), cax=cax, orientation="horizontal")
+        cb.ax.tick_params(labelsize=12)
+        fig.text(0.725, 0.095, f"shell {label}", ha="right", va="center", fontsize=14)
     fig.savefig(out, dpi=150)
     print("saved", out)
     return out

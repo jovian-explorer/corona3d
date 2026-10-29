@@ -133,7 +133,9 @@ def fit_step(h, cfg, a, flare, views, log):
             out = gcs.fit(wl, t_ref, t_out, flare, views, fixed, None, None, None, a.height_out, a.height_note,
                           drop_poor_views=getattr(a, "drop_poor_views", True), iou_min=a.iou_min,
                           onset=getattr(a, "onset", None), base_minutes=getattr(a, "base_minutes", gcs.BASE_MIN),
-                          direction_cone=getattr(a, "direction_cone", gcs.CONE))
+                          direction_cone=getattr(a, "direction_cone", gcs.CONE),
+                          euv=gcs.euv_folder(h, a) if getattr(a, "euv", False) else None,
+                          euv_views=getattr(a, "euv_views", None))
         except (SystemExit, Exception) as e:                     # SystemExit: the fit found no envelope or front
             attempts.append(dict(mode=name, status="failed", why=[str(e) or type(e).__name__]))
             log(f"gcs: {name} fit failed ({attempts[-1]['why'][0]})")
@@ -252,6 +254,21 @@ def run(h, a, log=print):
                 done["fetch_ovro_lwa"] = key
     else:
         step("fetch_ovro_lwa", "no OVRO-LWA entry (before 2024 April); nothing to fetch")
+    if getattr(a, "euv", False):
+        if done.get("fetch_euv"):
+            step("fetch_euv", "done earlier; skipped")
+        else:
+            from . import euv
+            try:
+                n = euv.fetch(h, cfg)
+            except Exception as e:
+                n = 1
+                log(f"EUV download: {e}")
+            step("fetch_euv", f"{n} files failed" if n else "downloaded")
+            if n:
+                failed.append("EUV download")
+            else:
+                done["fetch_euv"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     if any(e["instrument"] == "nrh" for e in cfg["radio_images"]):
         n = fetch.nrh(h, cfg)
         step("fetch_nrh", f"{n} frequencies without files; no automatic download exists" if n
@@ -339,13 +356,48 @@ def run(h, a, log=print):
     st["figures"] = {k: str(v.relative_to(h)).replace("\\", "/") for k, v in figures.items()}
     _save_state(h, st)
 
+    summ = shock_step(h, cfg, a, model_ok, step, failed, log) if getattr(a, "shock", False) else None
     (h / REPORT).write_text(report(h, cfg, a, flare, views, avail, st, steps, failed), encoding="utf-8")
+    if summ:
+        from . import shock
+        shock.update_report(h, summ)
     step("report", f"wrote {REPORT}")
     st["failed"] = failed
     _save_state(h, st)
     if not figures:
         return 1                                  # a total failure: nothing could be drawn
     return 1 if failed and getattr(a, "strict", False) else 0
+
+
+SHOCK_FIGURE = "figures/shock/corona3d.png"
+
+
+def shock_step(h, cfg, a, model_ok, step, failed, log):
+    """`--shock`: the shock diagnostics of corona3d shock (tables in analysis/) and the figure of the shell
+    coloured by the fast-magnetosonic Mach number. Returns the summary, or None when it failed."""
+    from . import reconstruction, shock
+    if not model_ok:
+        step("shock", "model files missing; skipped")
+        return None
+    try:
+        if fetch.model(h, cfg, fetch.EXTRA):
+            log("shock: some temperature or flow files failed to download")
+        summ, shell, rtab, tracks = shock.analyse(h, log=log)
+        out = shock.write(h / "analysis", summ, shell, rtab, tracks)
+        step("shock", f"diagnostics written to {out.relative_to(h).as_posix()}")
+    except (SystemExit, Exception) as e:
+        step("shock", f"failed ({e})")
+        failed.append(f"shock diagnostics ({e})")
+        return None
+    try:
+        reconstruction.make_figure(SHOCK_FIGURE, h, None, dict(shell_color="mach_f"), **dict(ON, radio=any(
+            ok for _, _, ok in radio_available(h, cfg))))
+        step("render_shock", "drawn")
+        summ["figure"] = SHOCK_FIGURE
+    except Exception as e:
+        step("render_shock", f"failed ({e})")
+        failed.append(f"figure shock ({e})")
+    return summ
 
 
 def report(h, cfg, a, flare, views, avail, st, steps, failed):
@@ -380,7 +432,12 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
                            f"the reconstruction time plus 60 minutes. The radio and shell time is {g['t_out']}.")
         elif a.t_ref:
             measured.append(f"The fit time {g['t_ref']} was given with --t-ref. The radio and shell time is {g['t_out']}.")
-        if g.get("height_source") == "measured":
+        if g.get("height_source") == "measured" and g.get("height_from") == "euv":
+            wl = g.get("height_t_out_wl")
+            measured.append(f"The apex height at {g['t_out']} is {g['height_t_out']:g} +/- {g['height_t_out_err']:g} R_sun, "
+                            f"measured in the EUV images of {', '.join(g.get('euv_views') or [])} ({g.get('euv_method')}) with the "
+                            f"shape of the white-light fit" + (f"; the white-light front extrapolates to {wl:g} R_sun." if wl is not None else "."))
+        elif g.get("height_source") == "measured":
             measured.append(f"The apex height at {g['t_out']} is {g['height_t_out']:g} +/- {g['height_t_out_err']:g} R_sun, "
                             f"extrapolated from the front in {g['front']} ({g['n_frames']} frames, {g['speed_km_s']:g} km/s).")
         else:
