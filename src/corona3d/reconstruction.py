@@ -4,8 +4,9 @@ MAS/MAST n_e iso-surface coloured by v_A, open and closed field lines, the close
 by the CME shell (the streamer loops), a grey reference sphere, the GCS shell of the CME, radio
 sources at their Newkirk heights as blobs and contours, and LASCO C2 and STEREO COR1, COR2 images.
 Each panel is seen from an observer (Earth, the solar north pole, or the STEREO spacecraft of the
-event) or from any Carrington direction, and the default panels follow the layout of Fig. 7 of
-Morosan et al. (2022), the benchmark event.
+event) or from any Carrington direction. For the validation event of 2013 October 25 the default
+panels share the viewpoints of Fig. 7 of Morosan et al. (2022), so that the two reconstructions can
+be compared panel by panel.
 """
 from datetime import timedelta
 from pathlib import Path

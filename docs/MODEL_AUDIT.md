@@ -1,9 +1,9 @@
 # Model audit: every method, model, and number of corona3d
 
-corona3d reconstructs the corona, a coronal mass ejection (CME), and its radio sources in three dimensions for any event, and its results can be trusted only as far as each method and number behind them can be traced. This file therefore lists every place where a method or a number of corona3d determines what the reconstruction shows. For each item, it gives the location in the code, the value used, the literature source when there is one, and the offline test that checks it. Every reference with a digital object identifier (DOI) was checked against its registry record with Argus and is listed in `docs/refs.bib`. Where a value depends on the event, the value given is that of the benchmark event of 2013 October 25 (Morosan et al. 2022), which is the default configuration, whereas another event takes such values from its own `config.json`.
+corona3d reconstructs the corona, a coronal mass ejection (CME), and its radio sources in three dimensions for any event, and its results can be trusted only as far as each method and number behind them can be traced. Earlier reconstructions of this kind, such as that of Morosan et al. (2022) for the CME of 2013 October 25, did not publish such a list, so that several of their choices, such as the parameters of the CME shell, cannot be checked. This file therefore lists every place where a method or a number of corona3d determines what the reconstruction shows. For each item, it gives the location in the code, the value used, the literature source when there is one, and the offline test that checks it. Every reference with a digital object identifier (DOI) was checked against its registry record with Argus and is listed in `docs/refs.bib`. Where a value depends on the event, the value given is that of the validation event of 2013 October 25, which is the default configuration, whereas another event takes such values from its own `config.json`.
 
 The status of each item is given by one of the following words.
-* **sourced**: the method or value follows the cited work.
+* **sourced**: the method or value is taken from the cited work.
 * **choice**: a setting of corona3d, documented in METHODS.md but taken from no publication.
 * **fitted**: derived from the data by `corona3d gcs`.
 * **fixed**: wrong in version 0.0.1 and corrected in 0.1.0, with a test.
@@ -25,7 +25,7 @@ The status of each item is given by one of the following words.
 ### F3. The CME shell at 15:00 UT was collapsed and lay below the radio heights
 * **Where**: `default_config.json` (`gcs`), `corona3d gcs`.
 * **Problem**: the shell had been refitted at 15:00 UT to EUV fronts, giving a half-angle of 1.07° (the two legs collapsed into one), an intersection over union of 0 in EUVI-A, and an apex at 1.443 R⊙, below both radio heights.
-* **Fix**: the shape of the 15:24 UT white-light fit is kept, and the apex height at 15:00 UT, 1.931 ± 0.158 R⊙, is extrapolated from the COR1-B front, as Morosan et al. (2022) scaled their shell back in time (METHODS.md, Section 7).
+* **Fix**: the shape of the 15:24 UT white-light fit is kept, and the apex height at 15:00 UT, 1.931 ± 0.158 R⊙, is extrapolated from the COR1-B front with its uncertainty (METHODS.md, Section 7).
 * **Test**: there is no offline test, but the fit is reproducible with `corona3d gcs` and its result is kept in `scripts/gcs_fit_2013-10-25.json`.
 
 ### F4. The streamer loops were selected by tuned parameters
@@ -106,10 +106,10 @@ In version 0.0.1, twenty-one statements of the README, METHODS.md, and the user 
 | Coronagraph comparison | `wl_mode` | ratio (default) or difference | fixed (F7) | | `test_plane_places_a_feature_in_3d` |
 | Fields of view | `INSTR` | C2 2.2-6, COR1 1.5-4, COR2 4-15 R⊙ | choice | instrument fields, trimmed at the occulter edges | `test_plane_places_a_feature_in_3d` |
 | Binning | `NBIN` | about 256 pixels across | choice | | `test_small_images_are_not_binned_to_nothing` |
-| Panel framing | `views[].frame` | from the published figure | choice | layout of Morosan et al. (2022), Fig. 7 | none |
+| Panel framing | `views[].frame` | the viewpoints of the published figure, for the comparison | choice | Morosan et al. (2022), Fig. 7 | none |
 | NRH image geometry | `nrh.py` | Sun centre at CRPIX (from 1), SOLAR_R pixels per R⊙, north up | sourced | NRH2 file headers (ROT_P = 1); Kerdraon & Delouis (1997) | `test_reader_places_a_source_at_its_sky_position` |
 | NRH source centroid | `nrh.source` | brightness-weighted, pixels above 0.5 of the peak | choice | | `test_reader_places_a_source_at_its_sky_position` |
-| Radio blobs | `radio_images` | one image per 60 s, peak ≥ 10⁸ K, coloured along a colour map per frequency | choice | the manner of Morosan et al. (2022), Fig. 7 | `test_radio_layer_draws_a_chain_of_blobs_per_frequency` |
+| Radio blobs | `radio_images` | one image per 60 s, peak ≥ 10⁸ K, coloured along a colour map per frequency | choice | colouring by time as in Morosan et al. (2022), Fig. 7, for the comparison | `test_radio_layer_draws_a_chain_of_blobs_per_frequency` |
 | Streamer lines drawn | `streamer_max_lines` | at most 150, an even subset; fainter with the radio layer | choice | | none |
 | Perspective option | `projection`, `camera_distance` | 6.65 R⊙ at the default framing | choice | the camera fitted to the published Fig. 7 | `test_perspective_projection_magnifies_the_near_side` |
 | OVRO-LWA image geometry | `ovro_lwa.py` | helioprojective header (CRPIX, CDELT, CRVAL in arcsec, RSUN_OBS); band images restored to the full grid by cubic interpolation | sourced | file headers; lwa-solar-util `recover_fits_from_h5` | `test_reader_restores_the_grid_and_places_the_source` |

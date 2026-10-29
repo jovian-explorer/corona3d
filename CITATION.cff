@@ -13,22 +13,25 @@ date-released: 2026-10-27
 abstract: >-
   corona3d is a physics-based Python package that reconstructs the solar corona, a coronal mass
   ejection (CME), and the sources of its radio burst in three dimensions for any event from public
-  data, following the method described in Morosan et al. (2022). It renders the electron-density
-  surface of a PSI MAS/MAST magnetohydrodynamic model at a chosen plasma level coloured by the
-  Alfven speed, together with open and closed coronal field lines and the closed lines through the
-  CME shell, using PyVista and VTK. The graduated cylindrical shell of the CME is fitted to
-  coronagraph images with PyThea, and the white-light images of SOHO/LASCO C2 and of the STEREO
-  COR1 and COR2 coronagraphs are drawn as ratio or difference planes in the plane of the sky of
-  their spacecraft. The sources of a radio burst are measured in images of the Nancay
-  Radioheliograph and of the Owens Valley Radio Observatory Long Wavelength Array as coloured blobs
-  and contours, which are placed at their Newkirk heights on the side of the plane of the sky that
-  faces the observer. Each panel is drawn with an orthographic projection from Earth, STEREO-A or
-  STEREO-B, the solar north pole, or any chosen direction, and every layer can be switched on or
-  off. A command-line interface driven by one configuration file downloads the data, fits the
-  shell, chooses the radio interval, and draws and exports the reconstruction. The CME of 2013
-  October 25, studied by Morosan et al. (2022), is the default configuration and the benchmark
-  against which the method is validated, and the CME and type II burst of 2024 May 9 is a new
-  application.
+  data. It renders the electron-density surface of a PSI MAS/MAST magnetohydrodynamic model at a
+  chosen plasma level coloured by the Alfven speed, traces the open and closed coronal field lines
+  through the whole model with its own fourth-order Runge-Kutta tracer, and selects without free
+  parameters the closed lines that pass through the CME shell, using PyVista and VTK. The graduated
+  cylindrical shell of the CME is fitted automatically to coronagraph images with PyThea, with the
+  intersection over union in each instrument as its objective and stated quality, guards against
+  degenerate shells and unconstrained directions, and an apex height at the time of the burst
+  extrapolated from the height-time profile of the front with its uncertainty. The white-light
+  images of SOHO/LASCO C2 and of the STEREO COR1 and COR2 coronagraphs are drawn as ratio or
+  difference planes in the plane of the sky of their spacecraft. The sources of a radio burst are
+  measured in images of the Nancay Radioheliograph and of the Owens Valley Radio Observatory Long
+  Wavelength Array as coloured blobs and contours, which are placed at their Newkirk heights on the
+  side of the plane of the sky that faces the observer. Each panel is drawn with an orthographic
+  projection from Earth, STEREO-A or STEREO-B, the solar north pole, or any chosen direction, every
+  layer can be switched on or off and exported with its provenance, and a command-line interface
+  driven by one configuration file reconstructs an event from its time and flare position and
+  writes a report that separates what was measured from what was assumed. The CME of 2013 October
+  25 is the validation case, in which the result is compared with the earlier reconstruction of
+  Morosan et al. (2022), and the CME and type II burst of 2024 May 9 is a new application.
 repository-code: "https://github.com/jovian-explorer/corona3d"
 url: "https://jovian-explorer.github.io/software.html#corona3d"
 keywords:

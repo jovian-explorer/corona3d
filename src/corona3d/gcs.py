@@ -4,7 +4,7 @@
    evolution to the CME envelopes in the images of the chosen instruments.
 2. The shape (aspect ratio, half-angle, direction, tilt) is kept, and the apex height at the time
    of the reconstruction (--t-out) is extrapolated from the height-time profile of the CME front,
-   as Morosan et al. (2022) scaled their 15:24 UT shell back in time. The front is measured in the
+   with the standard error of the intercept as its uncertainty. The front is measured in the
    instrument whose line of sight is most nearly perpendicular to the CME direction (the limb
    view), as the largest distance of the envelope from Sun centre, deprojected with the fitted
    direction, in every frame where the envelope covers at least 2 R_sun^2 and lies 0.2 R_sun or

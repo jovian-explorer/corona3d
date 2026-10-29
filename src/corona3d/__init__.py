@@ -1,6 +1,7 @@
 """corona3d: physics-based, reproducible three-dimensional reconstruction of the solar corona,
 coronal mass ejections, and radio sources for any event from public MHD, coronagraph, and radio
-data, following the method described in Morosan et al. (2022)."""
+data, with its own field-line tracer, a parameter-free selection of the streamer loops, an automated
+GCS fit with a stated quality, and a record of what was measured and what was assumed."""
 __version__ = "0.1.0"
 
 from .layers import LAYERS, ON  # noqa: E402
