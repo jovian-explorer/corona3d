@@ -11,17 +11,24 @@ version: 0.1.0
 license: MIT
 date-released: 2026-10-27
 abstract: >-
-  corona3d is a Python package that builds a three-dimensional reconstruction of a coronal mass
-  ejection (CME) and the corona it propagates through, following the method described in Morosan
-  et al. (2022). It draws the electron-density surface of a PSI MAS/MAST magnetohydrodynamic model
-  at a chosen plasma level coloured by the Alfven speed, open and closed coronal field lines and
-  the closed lines through the CME shell, the graduated cylindrical shell of the CME, the sources of
-  a radio burst measured in Nancay Radioheliograph images as chains of coloured blobs at their
-  Newkirk heights, and images of LASCO C2 and STEREO-B COR1 and COR2 placed in the plane of the sky
-  of their spacecraft, drawn with an orthographic projection from Earth, STEREO-B, the solar north
-  pole, or any chosen direction. Every layer can be switched on or off, and the default
-  configuration is the CME of 2013 October 25, for which the figure follows the layout of Fig. 7 of
-  Morosan et al. (2022) without reproducing it exactly.
+  corona3d is a physics-based Python package that reconstructs the solar corona, a coronal mass
+  ejection (CME), and the sources of its radio burst in three dimensions for any event from public
+  data, following the method described in Morosan et al. (2022). It renders the electron-density
+  surface of a PSI MAS/MAST magnetohydrodynamic model at a chosen plasma level coloured by the
+  Alfven speed, together with open and closed coronal field lines and the closed lines through the
+  CME shell, using PyVista and VTK. The graduated cylindrical shell of the CME is fitted to
+  coronagraph images with PyThea, and the white-light images of SOHO/LASCO C2 and of the STEREO
+  COR1 and COR2 coronagraphs are drawn as ratio or difference planes in the plane of the sky of
+  their spacecraft. The sources of a radio burst are measured in images of the Nancay
+  Radioheliograph and of the Owens Valley Radio Observatory Long Wavelength Array as coloured blobs
+  and contours, which are placed at their Newkirk heights on the side of the plane of the sky that
+  faces the observer. Each panel is drawn with an orthographic projection from Earth, STEREO-A or
+  STEREO-B, the solar north pole, or any chosen direction, and every layer can be switched on or
+  off. A command-line interface driven by one configuration file downloads the data, fits the
+  shell, chooses the radio interval, and draws and exports the reconstruction. The CME of 2013
+  October 25, studied by Morosan et al. (2022), is the default configuration and the benchmark
+  against which the method is validated, and the CME and type II burst of 2024 May 9 is a new
+  application.
 repository-code: "https://github.com/jovian-explorer/corona3d"
 url: "https://jovian-explorer.github.io/software.html#corona3d"
 keywords:

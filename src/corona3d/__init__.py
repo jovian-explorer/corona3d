@@ -1,5 +1,6 @@
-"""corona3d: three-dimensional reconstruction of a coronal mass ejection and the corona from public
-MHD, coronagraph, and radio data."""
+"""corona3d: physics-based, reproducible three-dimensional reconstruction of the solar corona,
+coronal mass ejections, and radio sources for any event from public MHD, coronagraph, and radio
+data, following the method described in Morosan et al. (2022)."""
 __version__ = "0.1.0"
 
 from .layers import LAYERS, ON  # noqa: E402

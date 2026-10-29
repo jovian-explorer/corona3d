@@ -1,8 +1,10 @@
 site_name: corona3d
+site_description: Physics-based, reproducible three-dimensional reconstruction of the solar corona, coronal mass ejections, and radio sources for any event from public data
 repo_url: https://github.com/jovian-explorer/corona3d
 theme:
   name: material
 nav:
+  - Home: index.md
   - User guide: USER_GUIDE.md
   - Methods: METHODS.md
   - Limitations: LIMITATIONS.md

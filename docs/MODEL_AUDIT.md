@@ -1,6 +1,6 @@
 # Model audit: every method, model, and number of corona3d
 
-This file lists every place where a method or a number of corona3d determines what the reconstruction shows. For each item, it gives the location in the code, the value used, the literature source when there is one, and the offline test that checks it. Every reference with a DOI was checked against its registry record with Argus and is listed in `docs/refs.bib`.
+corona3d reconstructs the corona, a coronal mass ejection (CME), and its radio sources in three dimensions for any event, and its results can be trusted only as far as each method and number behind them can be traced. This file therefore lists every place where a method or a number of corona3d determines what the reconstruction shows. For each item, it gives the location in the code, the value used, the literature source when there is one, and the offline test that checks it. Every reference with a digital object identifier (DOI) was checked against its registry record with Argus and is listed in `docs/refs.bib`. Where a value depends on the event, the value given is that of the benchmark event of 2013 October 25 (Morosan et al. 2022), which is the default configuration, whereas another event takes such values from its own `config.json`.
 
 The status of each item is given by one of the following words.
 * **sourced**: the method or value follows the cited work.

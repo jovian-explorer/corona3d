@@ -6,7 +6,25 @@
 
 ## Purpose
 
-Coronal mass ejections (CMEs) drive shocks through a corona whose density, magnetic field, and Alfvén speed vary strongly with height, latitude, and longitude. The radio bursts that these shocks excite, such as the herringbones of type II bursts, are emitted where the shock meets plasma of a particular density and field geometry. Whether a shock becomes super-Alfvénic, and whether it accelerates electrons along closed streamer loops or along open field, therefore depends on the three-dimensional structure of the corona at the moment the CME passes, which no single image can show. Morosan et al. ([2022](https://doi.org/10.1051/0004-6361/202244432)) combined a magnetohydrodynamic (MHD) model of the corona, a graduated cylindrical shell (GCS) of the CME, and radio-source positions in one three-dimensional reconstruction seen from three viewpoints (their Fig. 7), but such a reconstruction remains laborious to repeat for another event. In this study, we present corona3d, a Python package that follows the method described in Morosan et al. (2022) and builds the reconstruction for an event from its time and flare position, using a public MHD run, public coronagraph images, and radio images of the Nançay Radioheliograph (NRH; Kerdraon & Delouis [1997](https://doi.org/10.1007/BFb0106458)) or of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA; Chhabra et al. [2021](https://doi.org/10.3847/1538-4357/abc94b)). Every layer can be switched on or off, every viewpoint can be chosen, and every layer can be exported as arrays or tables for further analysis. Since the model run of Morosan et al. (2022) is no longer served and their CME shell and radio positions were not published, the figure that corona3d draws follows their approach and the layout of their Fig. 7 without reproducing it exactly.
+Coronal mass ejections (CMEs) drive shocks through a corona whose density, magnetic field, and Alfvén speed vary strongly with height, latitude, and longitude. The radio bursts that these shocks excite, such as type II bursts and their herringbones, are emitted where the shock meets plasma of a particular density and field geometry. Whether a shock becomes super-Alfvénic, and whether it accelerates electrons along closed streamer loops or along open field, therefore depends on the three-dimensional structure of the corona at the moment the CME passes, which no single image can show. Global models of the corona, coronagraphs on spacecraft at different positions, and imaging radio arrays together contain the information needed to recover this structure, although each of them is distributed in its own format, coordinate frame, and archive. Morosan et al. ([2022](https://doi.org/10.1051/0004-6361/202244432)) combined a magnetohydrodynamic (MHD) model of the corona, a graduated cylindrical shell (GCS) of the CME, and radio-source positions in one three-dimensional reconstruction seen from three viewpoints, but such a reconstruction remains laborious to build, and the relation between CME shocks, the coronal field, and the radio sources therefore remains poorly quantified for most events.
+
+corona3d is a Python package that builds this three-dimensional reconstruction of the corona, the CME, and the radio sources for any event from its time and flare position, using public data and physical models only. It follows the method described in Morosan et al. (2022) and turns it into a general, configuration-driven tool. The coronal model of Predictive Science Inc. (PSI) is rendered in three dimensions, the GCS shell of the CME is fitted to the coronagraph images, the white-light images of the Solar and Heliospheric Observatory (SOHO) and of the Solar Terrestrial Relations Observatory (STEREO) are placed in the plane of the sky of their spacecraft, and the radio sources measured in images of the Nançay Radioheliograph (NRH; Kerdraon & Delouis [1997](https://doi.org/10.1007/BFb0106458)) and of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA; Chhabra et al. [2021](https://doi.org/10.3847/1538-4357/abc94b)) are deprojected to their emission heights. Every layer can be switched on or off, every viewpoint can be chosen, every layer can be exported as arrays or tables, and every step is recorded with its inputs, so that a reconstruction can be repeated and checked by others. The CME of 2013 October 25, which Morosan et al. (2022) studied, is the benchmark against which corona3d is validated, and the CME and type II burst of 2024 May 9 is a new application of the same method.
+
+## What corona3d does
+
+The reconstruction is built from layers, each of which is computed from its own data and placed in one common Heliographic Carrington frame in solar radii (R⊙), so that the model, the shell, the images, and the radio sources can be compared directly.
+
+| Element | What corona3d computes | Data and tools |
+|---|---|---|
+| Coronal model | the surface of constant electron density at the plasma level of a chosen frequency, coloured by the Alfvén speed, the open and closed field lines traced through the whole model, and the closed lines through the CME shell, which are the streamer loops that the CME meets | the PSI MAS/MAST thermodynamic MHD run of the Carrington rotation of the event, drawn with PyVista and the Visualization Toolkit (VTK) |
+| CME shell | the GCS shell fitted to the CME envelopes in the coronagraph images, with its apex height extrapolated to the time of the reconstruction from the height-time profile of the front, and the quality of the fit stated with the intersection over union (IoU) in each instrument | PyThea, with the images of the Large Angle and Spectrometric Coronagraph (LASCO) C2 and of COR1 and COR2 on STEREO-A or STEREO-B |
+| White-light images | the brightness ratio, or difference, of each frame against the first frame of the download window, drawn on the plane through Sun centre perpendicular to the line of sight of its spacecraft | LASCO C2 and STEREO COR1 and COR2, level 0.5, through the Virtual Solar Observatory |
+| Radio sources | the centroids of the burst sources as chains of coloured blobs, and their contours at chosen fractions of the peak, placed at the heights of the four-fold Newkirk model for emission at the second harmonic | NRH images at 150 to 450 MHz, OVRO-LWA images at 32 to 87 MHz from 2024 April onward, and positions supplied by the user |
+| Viewpoints | orthographic panels from Earth, from the STEREO spacecraft, from above the solar north pole, or from any Carrington longitude and latitude | observer positions from the ephemerides of the Jet Propulsion Laboratory (JPL Horizons) through SunPy |
+| Workflow | one `config.json` per event, the commands `new`, `fetch`, `radio-interval`, `gcs`, `render`, `export`, and `event`, and a list of the radio bursts of a day from the event reports of the Space Weather Prediction Center (SWPC) of the National Oceanic and Atmospheric Administration (NOAA) | the public archives above |
+| Output | figures, the layers as `npz`, `csv`, or VTK files with `metadata.json`, and `event_report.md`, which separates what was measured from what was assumed | |
+
+Since every element is a key of the configuration, the same commands apply to an event observed by STEREO-B before 2014 October or by STEREO-A afterwards, with NRH or OVRO-LWA images, and with a model run of any Carrington rotation in the PSI archive.
 
 ## Install
 
@@ -24,7 +42,7 @@ pip install "corona3d[all] @ git+https://github.com/jovian-explorer/corona3d.git
 
 The plain package is the light core (downloads, event set-up, radio interval, `corona3d doctor`). The extras `render` (PyVista and PyThea, for the figures), `gcs` (PyThea and scikit-image, for the shell fit), and `radio` (h5py, for OVRO-LWA) add the heavy packages, `all` adds the three, and a command that needs a missing one names the extra to install. `corona3d --version` prints the version, and `corona3d doctor` reports the extras, the working directory (by default the platform cache directory, changed with `--home` or `CORONA3D_HOME`), and which archives answer. On macOS with an Intel processor, the HDF4 library must be installed first with `brew install hdf4`, and `conda install -c conda-forge pyhdf` is an alternative on any system. The user guide ([Section 1](docs/USER_GUIDE.md#1-install-and-start)) gives the details.
 
-## Quick start: one command for an event
+## Quick start: one command for any event
 
 ```
 mkdir event_work
@@ -34,22 +52,34 @@ corona3d event --time 2024-05-09T17:32 --flare S14W28
 
 The command writes the configuration of the event from its time and the flare position (14° south and 28° west of the disc centre), downloads the PSI MAS/MAST run and the white-light images, and, from 2024 April onward, the OVRO-LWA images, chooses the interval of the radio burst from the images, fits the GCS shell to the coronagraph images, draws the figures, and writes `event_report.md`. The report separates what was measured from what was assumed, lists the missing data, and gives the quality of the fit. When the free fit of the shell fails or is poor, the fit with the direction held at the flare site follows, and the report says so. The 2-D images of the NRH cannot be downloaded automatically (see the data sources below), and the report then names the manual step. The download takes a few minutes and the fit several more, whereas a figure takes about 40 s.
 
-The step-by-step commands, for the event of 2013 October 25 studied by Morosan et al. (2022), are
+When only the date of an event is known, `corona3d event --time 2024-05-09 --flare S14W28` lists the type II and type III bursts of that day, and `--burst N` runs the event at the begin time of burst N, for example `--time 2024-05-09 --burst 4` for the type II burst of 17:32 UT. The same steps can also be run one at a time, which is useful when a step has to be checked or repeated with other options:
+
+```
+corona3d new --time 2024-05-09T17:32 --flare S14W28   # config.json of the event
+corona3d fetch                                        # model run and white-light images
+corona3d fetch --ovro-lwa                             # OVRO-LWA images of the radio interval
+corona3d radio-interval                               # burst interval chosen from the radio images
+corona3d gcs --flare 28 -14 --views c2,cor1a,cor2a    # GCS fit to the coronagraph images
+corona3d render --radio                               # figures/corona3d.png with the radio sources
+corona3d export --format vtk                          # the layers as files for ParaView
+```
+
+The figures are written to `figures/` together with the image of each panel (`view_a.png`, `view_b.png`, `view_c.png`). Moreover, the [user guide](docs/USER_GUIDE.md) describes every command, option, and parameter, [docs/METHODS.md](docs/METHODS.md) derives how each element of the reconstruction is computed, [docs/LIMITATIONS.md](docs/LIMITATIONS.md) states where the results cannot be trusted, and [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md) lists every method and number with its source and its test.
+
+## Validation: the CME of 2013 October 25
+
+The benchmark of corona3d is the event studied by Morosan et al. (2022), in which a CME was launched from the eastern hemisphere at about 15:00 UT and observed from Earth and from STEREO-B, 142° apart, while the NRH recorded herringbones at 173 and 228 MHz. Its configuration is installed with the package, and the figure follows the layout of their Fig. 7, so that each layer of corona3d can be compared with the published reconstruction:
 
 ```
 mkdir corona3d_work
 cd corona3d_work
-corona3d init                  # writes config.json of that event
+corona3d init                  # writes config.json of the benchmark event
 corona3d fetch                 # model run and white-light images (about 130 MB)
 corona3d render                # figures/corona3d.png
 corona3d render --c2 --cor1 --cor2 --out figures/corona3d_wl.png
 ```
 
-The figures are written to `figures/` together with the image of each panel (`view_a.png`, `view_b.png`, `view_c.png`). Moreover, the [user guide](docs/USER_GUIDE.md) describes every command, option, and parameter, [docs/METHODS.md](docs/METHODS.md) derives how each element of the reconstruction is computed, [docs/LIMITATIONS.md](docs/LIMITATIONS.md) states where the results cannot be trusted, and [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md) lists every method and number with its source and its test.
-
-### Worked example: the CME of 2013 October 25
-
-The default configuration is the event studied by Morosan et al. (2022), in which a CME was launched from the eastern hemisphere at about 15:00 UT and observed from Earth and from STEREO-B, 142° apart, while the NRH recorded herringbones at 173 and 228 MHz. The command `corona3d render` draws this event as seen from Earth, from above the solar north pole, and from STEREO-B. The electron-density surface lies at 9 × 10⁷ cm⁻³, the level that Morosan et al. used for the 173 MHz harmonic emission, and is coloured by the Alfvén speed between 100 and 700 km s⁻¹. The open and closed field lines are traced from 4,500 footpoints, and the closed lines that pass through the CME shell, the loops of the streamer that the CME meets, are drawn in purple.
+The command `corona3d render` draws this event as seen from Earth, from above the solar north pole, and from STEREO-B. The electron-density surface lies at 9 × 10⁷ cm⁻³, the level that Morosan et al. used for the 173 MHz harmonic emission, and is coloured by the Alfvén speed between 100 and 700 km s⁻¹. The open and closed field lines are traced from 4,500 footpoints, and the closed lines that pass through the CME shell, the loops of the streamer that the CME meets, are drawn in purple.
 
 <p align="center"><img src="docs/corona3d_2013-10-25.png" width="100%" alt="The reconstruction of 2013 October 25 seen from Earth, the solar north pole, and STEREO-B"></p>
 
@@ -60,6 +90,23 @@ With `--c2 --cor1 --cor2`, the LASCO C2 image of 15:24 UT appears in the Earth v
 With `--radio` and the NRH images of the event copied into `data/nrh/`, the sources of the burst are added as coloured blobs (user guide, Section 5.7). The images available for the afternoon of that day are those at 150.9 and 432 MHz, and between 14:59 and 15:03 UT one image per minute gives five blobs at 150.9 MHz and three at 432 MHz, at 1.647 and 1.221 R⊙. These frequencies differ from the 173 and 228 MHz of Morosan et al. (2022), so that the blobs follow their figure in kind but not in frequency.
 
 <p align="center"><img src="docs/corona3d_2013-10-25_radio.png" width="100%" alt="The reconstruction with the NRH radio sources at 150.9 and 432 MHz as coloured blobs"></p>
+
+Since the model run of Morosan et al. (2022) is no longer served and their CME shell and radio positions were not published, the benchmark tests the method and not a copy of their figure. The public run of the same Carrington rotation was chosen as the one that reproduces the outline of their density surface best, the GCS shell was fitted again by corona3d from the public coronagraph images, and the radio sources are measured from the NRH images that can be obtained today. The figure therefore follows their approach and the layout of their Fig. 7 without reproducing it exactly, and Section 11 of the [user guide](docs/USER_GUIDE.md) lists what agrees and what differs.
+
+## Application: the CME and type II burst of 2024 May 9
+
+The CME of 2024 May 9 followed an X1.1 flare at S14W28 in active region 13664, and its type II burst began at 17:32 UT. Since STEREO-B lost contact with Earth in 2014 October and LASCO C2 has no frame between 14:48 and 18:52 UT, this event tests the parts of corona3d that the benchmark does not, namely STEREO-A, a data gap, and the OVRO-LWA images. The preset installs its configuration, with the PSI run `cr2284-high/hmi_mast_mas_std_0201`, the positions of Earth and STEREO-A, and the OVRO-LWA images at 34.1, 52.4, 70.8, and 84.6 MHz:
+
+```
+mkdir may2024_work
+cd may2024_work
+corona3d init --event 2024-05-09
+corona3d fetch
+corona3d fetch --ovro-lwa
+corona3d render --radio --shell-on-top
+```
+
+The GCS shell of the preset was fitted to the COR1-A and COR2-A images at 17:55 UT with the direction held at the flare site, which gives an apex height of 3.722 R⊙ and an IoU of 0.878 in COR1-A. Earth and STEREO-A were separated by only about 12° in Carrington longitude, so that the two coronagraphs see the CME nearly from the same side and do not constrain its direction, and corona3d therefore ties the direction to the source region. Moreover, the coronagraph images show no rising front at 17:32 UT, and the apex height of 1.77 R⊙ at the time of the burst is assumed from a constant speed of about 985 km s⁻¹ after the flare onset at 17:23 UT, which the key `gcs_note` records. A shell this low lies partly inside the density surface, and `--shell-on-top` draws it, together with the radio sources, over the surface. The same event is reconstructed from its date alone with `corona3d event --time 2024-05-09 --flare S14W28 --burst 4`, and its `event_report.md` then states what was measured and what was assumed for this event, including the gap of LASCO C2 (user guide, Sections 9.1 and 9.5; [docs/LIMITATIONS.md](docs/LIMITATIONS.md), Sections 1 to 4).
 
 ## What is measured and what is assumed
 
@@ -88,11 +135,11 @@ The model run and the images are public, and `corona3d fetch` downloads them int
 | OVRO-LWA spectral images (Stokes I, 10 s, 12 bands at 34 to 85 MHz), from 2024 April | [OVRO-LWA solar data](https://ovsa.njit.edu/docs/pages/ovro-lwa-solar-data-products/), public bucket on Amazon Web Services (CC BY 4.0); `corona3d fetch --ovro-lwa` | radio layer |
 | Other radio-source positions (optional) | supplied by the user | radio layer |
 
-Work that uses these data should acknowledge the PSI model runs, the LASCO and SECCHI teams, the Nançay Radioheliograph, and OVRO-LWA with the references above. All references are collected in [docs/refs.bib](docs/refs.bib).
+SECCHI is the Sun Earth Connection Coronal and Heliospheric Investigation of STEREO. Work that uses these data should acknowledge the PSI model runs, the LASCO and SECCHI teams, the Nançay Radioheliograph, and OVRO-LWA with the references above, and all references are collected in [docs/refs.bib](docs/refs.bib).
 
 ## Using corona3d from Python
 
-`corona3d.build(home, **layers)` returns the layers of a working directory as NumPy arrays in a `Reconstruction`, and `corona3d export` writes them as `npz`, `csv`, or VTK files together with `metadata.json`, which records the version, the configuration, and the sources of every input (user guide, Section 8).
+`corona3d.build(home, **layers)` returns the layers of a working directory as NumPy arrays in a `Reconstruction`, and `corona3d export` writes them as `npz`, `csv`, or VTK files together with `metadata.json`, which records the version, the configuration, and the sources of every input (user guide, Section 8). In this way the density, the Alfvén speed, the field lines, the shell, and the radio positions of an event can be used in further analysis without the figure.
 
 ## Citing
 

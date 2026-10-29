@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "corona3d"
 dynamic = ["version"]
-description = "Three-dimensional reconstruction of a coronal mass ejection and the corona from public MHD, coronagraph, and radio data"
+description = "Physics-based, reproducible three-dimensional reconstruction of the solar corona, coronal mass ejections, and radio sources for any event from public MHD, coronagraph, and radio data"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
