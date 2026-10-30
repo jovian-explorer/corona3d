@@ -2,7 +2,7 @@
 coronal mass ejections, and radio sources for any event from public MHD, coronagraph, and radio
 data, with its own field-line tracer, a parameter-free selection of the streamer loops, an automated
 GCS fit with a stated quality, and a record of what was measured and what was assumed."""
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .layers import LAYERS, ON  # noqa: E402
 from .paths import config as load_config  # noqa: E402
