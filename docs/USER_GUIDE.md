@@ -145,6 +145,8 @@ draws the three-panel figure into `figures/corona3d.png`. By default, panel a sh
 | `--<layer>` / `--no-<layer>` | switch a layer on or off (Section 5) |
 | `--view PANEL=VIEW` | the viewpoint of a panel (Section 6); may be given for each panel |
 | `--out PATH` | file of the figure, relative to the working directory (default `figures/corona3d.png`) |
+| `--panel VIEW` | the views to draw, in this order; repeatable, or a comma list of `earth`, `north`, `stereo`, `solo`, or the Carrington degrees `lon,lat[,roll]` of a viewing direction, for example `--panel earth,north --panel 120,-10`. A view that the configuration holds keeps its framing; any other takes the default framing. Without it the three views of the configuration are drawn |
+| `--layout LAYOUT` | `landscape` (default): all panels in one row, with the size and the colour bars of Fig. 7 for up to three panels and a wider figure for more; `portrait`: one column; `separate`: one file per view, named like `--out` with the name of the view appended (`corona3d_earth.png`, `corona3d_lon120_lat-10.png`) |
 | `--half H` | half-height of all three panels in R⊙; by default each panel has the framing of the configuration (about 1.5 R⊙), widened to 6 R⊙ in the panel of C2 or COR2 and to 4 R⊙ in the panel of COR1 alone |
 | `--wl-at burst` | draws the coronagraph panels at the burst time (`time` of the configuration) instead of the fit time: the shell is the one at `--t-out` (`gcs` when `gcs_fit` exists, with a height that the fit marks as assumed staying marked), and each coronagraph shows its own frame nearest to that time that follows its base frame, the first frame of `wl_window`. A frame more than 30 min away is still used and is labelled on the panel and in the report as the nearest frame with its distance in minutes. A configuration without `gcs_fit` needs `--wl-height H` and `--wl-height-note TEXT`; the height is then drawn as assumed. `corona3d event --wl-at burst` does the same for the coronagraph figure of the event |
 | `--shell-on-top` | draws the GCS shell and the radio sources in a second layer over the model surface. A shell close to the Sun, such as one at the burst time, lies partly inside the surface of constant density and would otherwise be hidden by it. The legs of the shell are then also drawn where the photosphere hides them |
@@ -166,6 +168,23 @@ corona3d render --c2 --wl-time 2013-10-25T15:36 --out figures/c2_1536.png  # a l
 corona3d render --radio --c2 --cor1 --cor2 --wl-at burst --wl-height 1.77 --wl-height-note "kinematic estimate" --shell-on-top  # shell and frames at the burst time
 corona3d render --view b=300,20 --view c=north --out figures/views.png     # other viewpoints for panels b and c
 ```
+
+### 4.1 `corona3d animate`: a GIF and an MP4 through a time interval
+
+```
+corona3d animate --start 2013-10-25T14:59:00 --end 2013-10-25T15:03:00 --step 40 --fps 2 --panel earth,north,stereo --radio --gif --mp4
+```
+
+draws one frame of the figure of `render` for every time from `--start` to `--end` and joins the frames into `figures/corona3d_animation.gif` (`--gif`, also the default when no format is given) and `.mp4` (`--mp4`, H.264 with `yuv420p`, written with the ffmpeg of the package imageio-ffmpeg, which `pip install "corona3d[animate]"` installs, or else with an ffmpeg on the path). Without `--start` and `--end` the interval of the radio images of the configuration is used, and without `--step` its `step_s`. The options of `render` for the layers, the panels (`--panel`), and the layout (`--layout`) apply; with `--layout separate` one animation per view is written. In each frame the shell has the apex height that a height law gives for the frame time, and the radio sources of every image up to the frame time are drawn, so that the blobs accumulate; the frame time is written on the figure. The height law is one of the following:
+
+| Option | Height law |
+|---|---|
+| none | the straight line through the two shells of the configuration, `gcs` at `time` and `gcs_wl` at its own time (the two GCS fits), also beyond them |
+| `--height-fits TIME=H,TIME=H` | the straight line through two heights given by hand, in R⊙ |
+| `--speed KM_S` | a constant apex speed from `--height-at TIME=H` (default: the shell `gcs` at its time), as a height-time fit gives it |
+| `--heights FILE` | measured apex heights from the EUV images or from Solar Orbiter, a CSV file of the time and the height in R⊙, interpolated linearly; all frames must lie between the first and the last time |
+
+The model surface and the field lines are computed once and used for every frame, and the streamer lines are those of the shell of the fit. The cameras, the panel scale, the colour limit of the density surface, the grey scale of each coronagraph (the largest value over all frames), and the radio time range (from the first radio image to the last frame, or `radio_time_range`) are the same in all frames, so that a blob keeps its colour as the interval grows. A GIF holds 256 colours; to keep the colours of the surface and the blobs the same in every frame, one palette is built for the whole GIF. It reserves the 40 colours of the Alfvén speed map and their copies at 0.75 and 0.5 of the brightness (the shade of the surface), the 12 steps from light to dark of every radio colour, the colours of the shell and the streamer lines, black, and white, fills the remaining colours with a median cut of all frames, and is applied without dithering. `--gif-scale F` (default 0.5) sets the size of the GIF frames relative to the figure; the MP4 has the full size.
 
 ## 5. The layers
 

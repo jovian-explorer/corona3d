@@ -39,9 +39,11 @@ render = ["pyvista>=0.43", "PyThea>=1.3,<1.4"]
 gcs = ["PyThea>=1.3,<1.4", "scikit-image>=0.22"]
 # the OVRO-LWA image reader (the NRH reader needs only the core)
 radio = ["h5py>=3.8"]
+# the MP4 of corona3d animate (a GIF needs only Pillow, which PyVista installs)
+animate = ["imageio-ffmpeg>=0.5"]
 docs = ["mkdocs>=1.5", "mkdocs-material>=9"]
 test = ["pytest>=7", "pillow>=10"]
-all = ["corona3d[render,gcs,radio]"]
+all = ["corona3d[render,gcs,radio,animate]"]
 
 [project.urls]
 Homepage = "https://jovian-explorer.github.io/software.html#corona3d"

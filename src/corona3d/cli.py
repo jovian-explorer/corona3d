@@ -46,6 +46,100 @@ def parse_opacity(text):
     return k, vals[0] if len(vals) == 1 else vals
 
 
+def figure_options(r):
+    """The layers, the panels, and the other options that corona3d render and corona3d animate share."""
+    for k in LAYERS:
+        r.add_argument(f"--{k}", action=argparse.BooleanOptionalAction, default=ON[k])
+    r.add_argument("--half", type=float, help="panel half-height [R_sun] for all panels")
+    r.add_argument("--shell-on-top", action="store_true",
+                   help="draw the GCS shell over the model surface, so that a shell close to the Sun stays visible")
+    r.add_argument("--view", action="append", default=[], metavar="PANEL=VIEW",
+                   help="viewpoint of a panel: a=earth, b=north, c=stereo, c=solo (Solar Orbiter), or a Carrington "
+                        "longitude and latitude of the viewing direction with an optional roll, "
+                        "e.g. b=300,20 or c=120,-10,45 (repeatable)")
+    r.add_argument("--radio-sources", help='JSON list, e.g. [{"freq": 173, "x": -1.1, "y": -0.1}]')
+    r.add_argument("--opacity", action="append", default=[], metavar="LAYER=VALUE",
+                   help="opacity of a layer from 0 (transparent) to 1: one number, or for radio, radio_contours, "
+                        "surface and wl a comma list (per blob from early to late, per contour level from the lowest "
+                        "to the highest, or over the colour range), or for surface and wl a transfer function such as "
+                        "linear or sigmoid; layers: " + ", ".join(OPACITY_KEYS) + " (repeatable)")
+    r.add_argument("--contours", action="store_true", help="draw the contours of the last radio image of every frequency")
+    r.add_argument("--shell-color", choices=("mach_a", "mach_f", "theta_bn", "vn", "va"),
+                   help="colour the GCS shell by the Alfven or fast-magnetosonic Mach number, theta_Bn, the normal speed, "
+                        "or the upstream Alfven speed (corona3d shock; needs the apex speed of the fit or --shell-speed)")
+    r.add_argument("--shell-clim", type=floats, metavar="LO,HI", help="colour limits of --shell-color")
+    r.add_argument("--shell-speed", type=float, metavar="KM_S", help="apex speed for --shell-color when the configuration has no fit")
+    r.add_argument("--radio-height-range", action="store_true",
+                   help="draw the range of heights of every radio position over the density models of shock.height_models "
+                        "as a segment along the line of sight")
+    r.add_argument("--radio-surface", choices=("sphere", "model"),
+                   help="place the radio sources on the sphere of the four-fold Newkirk height (default) or where the line of "
+                        "sight meets the plasma-frequency surface of the scaled MAS density (config radio_deproject)")
+    r.add_argument("--emission", choices=("H", "F", "auto"),
+                   help="harmonic or fundamental emission of every radio source, or auto from the NRH polarisation "
+                        "(config radio_emission and the emission key of each radio_images entry)")
+    r.add_argument("--scattering", action="store_true",
+                   help="correct the radio positions for the radial shift by scattering (config scattering.apply)")
+    r.add_argument("--contour-levels", type=floats, metavar="L1,L2,...",
+                   help="contour levels as fractions of the peak of the image, e.g. 0.3,0.5,0.7,0.9 (implies --contours)")
+    r.add_argument("--panel", action="append", default=[], metavar="VIEW",
+                   help="a view to draw, in this order (repeatable, or a comma list): earth, north, stereo, solo, or "
+                        "Carrington degrees lon,lat[,roll] of the viewing direction; default: the three views of "
+                        "config.json. A view that is not in the configuration takes the default framing")
+    r.add_argument("--layout", choices=("landscape", "portrait", "separate"), default="landscape",
+                   help="the panels in one row (landscape, default), one column (portrait), or one file per view "
+                        "(separate: the name of the view is appended to --out)")
+
+
+def render_params(a, cfg):
+    """The configuration keys that the options of corona3d render and corona3d animate change."""
+    params = {}
+    if getattr(a, "wl_time", None):
+        params["wl_time"] = a.wl_time
+        params["wl_time_given"] = a.wl_time
+    if getattr(a, "wl_at", None) == "burst":
+        params.update(wl_at="burst", wl_height=a.wl_height, wl_height_note=a.wl_height_note)
+    if getattr(a, "shell_on_top", False):
+        params["shell_on_top"] = True
+    if a.radio_sources:
+        params["radio_sources"] = json.loads(a.radio_sources)
+    if a.opacity:
+        params["opacity"] = dict(parse_opacity(t) for t in a.opacity)
+        if "wl" in params["opacity"]:
+            params["wl_opacity"] = params["opacity"]["wl"]   # replaces a wl_opacity of config.json
+    if a.shell_color:
+        params["shell_color"] = a.shell_color
+        if a.shell_clim:
+            params["shell_clim"] = a.shell_clim
+        if a.shell_speed is not None:
+            params["shock_speed_km_s"] = a.shell_speed
+    if a.radio_height_range:
+        params["radio_height_range"] = True
+    if a.radio_surface:
+        params["radio_deproject"] = a.radio_surface
+    if a.emission:
+        params["radio_emission"] = a.emission
+        params["radio_images"] = [{k: v for k, v in e.items() if k != "emission"} for e in cfg["radio_images"]]
+    if a.scattering:
+        params["scattering"] = {"apply": True}
+    if a.contours or a.contour_levels:
+        params["radio_images"] = [dict(e, contours=True, **({"contour_levels": a.contour_levels}
+                                                            if a.contour_levels else {}))
+                                  for e in params.get("radio_images", cfg["radio_images"])]
+    from .reconstruction import parse_view
+    if a.view:
+        views = [dict(v) for v in cfg["views"]]
+        for text in a.view:
+            i, v = parse_view(text)
+            sc = v.pop("sc", None)                     # legacy stereo_a / stereo_b
+            if sc and sc != cfg["stereo_sc"]:
+                sys.exit(f"--view {text}: this event uses STEREO-{cfg['stereo_sc']} (config.json stereo_sc)")
+            views[i] = dict(v, frame=views[i].get("frame", [1.6, 0.0, 0.0]) if "from" in v and
+                            v["from"] == views[i].get("from") else [1.6, 0.0, 0.0])
+        params["views"] = views
+    return params
+
+
 def main(argv=None):
     from ._extras import MissingExtra
     try:
@@ -189,10 +283,7 @@ def _main(argv=None):
     ev.add_argument("--force", action="store_true", help="repeat the downloads, the fit, and the figures")
     r = sub.add_parser("render", help="draw the three-panel figure",
                        epilog="layers: " + ", ".join(LAYERS))
-    for k in LAYERS:
-        r.add_argument(f"--{k}", action=argparse.BooleanOptionalAction, default=ON[k])
     r.add_argument("--out", default="figures/corona3d.png", help="figure path, relative to the working directory")
-    r.add_argument("--half", type=float, help="panel half-height [R_sun] for all three panels")
     r.add_argument("--wl-time", help="white-light frame, e.g. 2013-10-25T15:24")
     r.add_argument("--wl-at", choices=("fit", "burst"), default="fit",
                    help="time of the coronagraph figure: the fit time wl_time (default) or the burst time, with the shell at "
@@ -200,37 +291,28 @@ def _main(argv=None):
     r.add_argument("--wl-height", type=float, help="apex height [R_sun] of the shell at the burst time (--wl-at burst), "
                    "for a configuration without gcs_fit; drawn as assumed")
     r.add_argument("--wl-height-note", help="reason for --wl-height (written on the figure)")
-    r.add_argument("--shell-on-top", action="store_true",
-                   help="draw the GCS shell over the model surface, so that a shell close to the Sun stays visible")
-    r.add_argument("--view", action="append", default=[], metavar="PANEL=VIEW",
-                   help="viewpoint of a panel: a=earth, b=north, c=stereo, c=solo (Solar Orbiter), or a Carrington "
-                        "longitude and latitude of the viewing direction with an optional roll, "
-                        "e.g. b=300,20 or c=120,-10,45 (repeatable)")
-    r.add_argument("--radio-sources", help='JSON list, e.g. [{"freq": 173, "x": -1.1, "y": -0.1}]')
-    r.add_argument("--opacity", action="append", default=[], metavar="LAYER=VALUE",
-                   help="opacity of a layer from 0 (transparent) to 1: one number, or for radio, radio_contours, "
-                        "surface and wl a comma list (per blob from early to late, per contour level from the lowest "
-                        "to the highest, or over the colour range), or for surface and wl a transfer function such as "
-                        "linear or sigmoid; layers: " + ", ".join(OPACITY_KEYS) + " (repeatable)")
-    r.add_argument("--contours", action="store_true", help="draw the contours of the last radio image of every frequency")
-    r.add_argument("--shell-color", choices=("mach_a", "mach_f", "theta_bn", "vn", "va"),
-                   help="colour the GCS shell by the Alfven or fast-magnetosonic Mach number, theta_Bn, the normal speed, "
-                        "or the upstream Alfven speed (corona3d shock; needs the apex speed of the fit or --shell-speed)")
-    r.add_argument("--shell-clim", type=floats, metavar="LO,HI", help="colour limits of --shell-color")
-    r.add_argument("--shell-speed", type=float, metavar="KM_S", help="apex speed for --shell-color when the configuration has no fit")
-    r.add_argument("--radio-height-range", action="store_true",
-                   help="draw the range of heights of every radio position over the density models of shock.height_models "
-                        "as a segment along the line of sight")
-    r.add_argument("--radio-surface", choices=("sphere", "model"),
-                   help="place the radio sources on the sphere of the four-fold Newkirk height (default) or where the line of "
-                        "sight meets the plasma-frequency surface of the scaled MAS density (config radio_deproject)")
-    r.add_argument("--emission", choices=("H", "F", "auto"),
-                   help="harmonic or fundamental emission of every radio source, or auto from the NRH polarisation "
-                        "(config radio_emission and the emission key of each radio_images entry)")
-    r.add_argument("--scattering", action="store_true",
-                   help="correct the radio positions for the radial shift by scattering (config scattering.apply)")
-    r.add_argument("--contour-levels", type=floats, metavar="L1,L2,...",
-                   help="contour levels as fractions of the peak of the image, e.g. 0.3,0.5,0.7,0.9 (implies --contours)")
+    figure_options(r)
+    an = sub.add_parser("animate", help="GIF and MP4 of the reconstruction through a time interval",
+                        description="One frame per time: the shell has the apex height of a height law and the radio "
+                                    "images accumulate up to the frame time (docs/USER_GUIDE.md, Section 4.1). Without "
+                                    "--start and --end the interval of the radio images of config.json is used.",
+                        epilog="layers: " + ", ".join(LAYERS))
+    an.add_argument("--out", default="figures/corona3d_animation", help="file name without extension, relative to the working directory")
+    an.add_argument("--start", help="first frame, e.g. 2013-10-25T14:59:00")
+    an.add_argument("--end", help="last frame")
+    an.add_argument("--step", type=float, metavar="S", help="seconds between frames (default: step_s of the first radio entry, else 60)")
+    an.add_argument("--fps", type=float, default=2.0, help="frames per second (default 2)")
+    an.add_argument("--gif", action="store_true", help="write a GIF (default when --mp4 is not given)")
+    an.add_argument("--mp4", action="store_true", help="write an MP4 (H.264, yuv420p; needs imageio-ffmpeg or ffmpeg)")
+    an.add_argument("--gif-scale", type=float, default=0.5, metavar="F", help="size of the GIF frames relative to the figure (default 0.5)")
+    an.add_argument("--height-fits", metavar="TIME=H,TIME=H",
+                    help="apex height [R_sun] at two times, for example the two GCS fits; the shell rises on the straight line "
+                         "through them (default: the shells gcs and gcs_wl of config.json)")
+    an.add_argument("--speed", type=float, metavar="KM_S", help="constant apex speed from --height-at (default: the shell gcs at its time)")
+    an.add_argument("--height-at", metavar="TIME=H", help="the height at one time, with --speed")
+    an.add_argument("--heights", metavar="FILE", help="measured apex heights (EUV, Solar Orbiter) as a CSV file of time and height "
+                    "[R_sun]; the frames must lie between the first and the last time")
+    figure_options(an)
     sk = sub.add_parser("shock", help="Mach numbers, theta_Bn, and speeds of the CME shell, and heights, speeds, and "
                         "polarisation of the radio sources",
                         description="Samples the MAS/MAST corona on the GCS shell and at the radio sources and writes the "
@@ -378,51 +460,23 @@ def _main(argv=None):
                    **{k: getattr(a, k) for k in LAYERS if k != "sphere"})
         print("exported to", d)
         return
-    params = {}
-    if a.wl_time:
-        params["wl_time"] = a.wl_time
-        params["wl_time_given"] = a.wl_time
-    if a.wl_at == "burst":
-        params.update(wl_at="burst", wl_height=a.wl_height, wl_height_note=a.wl_height_note)
-    if getattr(a, "shell_on_top", False):
-        params["shell_on_top"] = True
-    if a.radio_sources:
-        params["radio_sources"] = json.loads(a.radio_sources)
-    if a.opacity:
-        params["opacity"] = dict(parse_opacity(t) for t in a.opacity)
-        if "wl" in params["opacity"]:
-            params["wl_opacity"] = params["opacity"]["wl"]   # replaces a wl_opacity of config.json
-    if a.shell_color:
-        params["shell_color"] = a.shell_color
-        if a.shell_clim:
-            params["shell_clim"] = a.shell_clim
-        if a.shell_speed is not None:
-            params["shock_speed_km_s"] = a.shell_speed
-    if a.radio_height_range:
-        params["radio_height_range"] = True
-    if a.radio_surface:
-        params["radio_deproject"] = a.radio_surface
-    if a.emission:
-        params["radio_emission"] = a.emission
-        params["radio_images"] = [{k: v for k, v in e.items() if k != "emission"} for e in cfg["radio_images"]]
-    if a.scattering:
-        params["scattering"] = {"apply": True}
-    if a.contours or a.contour_levels:
-        params["radio_images"] = [dict(e, contours=True, **({"contour_levels": a.contour_levels}
-                                                            if a.contour_levels else {}))
-                                  for e in params.get("radio_images", cfg["radio_images"])]
-    from .reconstruction import make_figure, parse_view
-    if a.view:
-        views = [dict(v) for v in cfg["views"]]
-        for text in a.view:
-            i, v = parse_view(text)
-            sc = v.pop("sc", None)                     # legacy stereo_a / stereo_b
-            if sc and sc != cfg["stereo_sc"]:
-                sys.exit(f"--view {text}: this event uses STEREO-{cfg['stereo_sc']} (config.json stereo_sc)")
-            views[i] = dict(v, frame=views[i].get("frame", [1.6, 0.0, 0.0]) if "from" in v and
-                            v["from"] == views[i].get("from") else [1.6, 0.0, 0.0])
-        params["views"] = views
-    make_figure(a.out, h, a.half, params, **{k: getattr(a, k) for k in LAYERS})
+    params = render_params(a, cfg)
+    panels = a.panel or None
+    if a.cmd == "animate":
+        from . import animate
+        from .animate import height_law, parse_height_points, read_heights
+        try:
+            pm = paths.merge(cfg, params)
+            law = height_law(pm, fits=parse_height_points(a.height_fits) if a.height_fits else None,
+                             table=read_heights(a.heights) if a.heights else None, speed_km_s=a.speed,
+                             anchor=parse_height_points(a.height_at)[0] if a.height_at else None)
+            animate.animate(a.out, h, a.start, a.end, a.step, a.fps, a.gif, a.mp4, a.half, params, panels, a.layout,
+                            law, a.gif_scale, **{k: getattr(a, k) for k in LAYERS})
+        except (ValueError, RuntimeError) as e:
+            sys.exit(f"corona3d animate: {e}")
+        return
+    from .reconstruction import make_figure
+    make_figure(a.out, h, a.half, params, panels=panels, layout=a.layout, **{k: getattr(a, k) for k in LAYERS})
 
 
 if __name__ == "__main__":

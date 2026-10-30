@@ -162,39 +162,55 @@ def burst_shell(p):
     return p
 
 
-def reconstruct(p=None, on=None, data_root="."):
+def reconstruct(p=None, on=None, data_root=".", cache=None):
     """Build the layers that are switched on; p and on may hold only the keys that differ from
-    the defaults. Returns a dictionary of the layers and of the times used."""
+    the defaults. Returns a dictionary of the layers and of the times used. cache: a dictionary that keeps the
+    model, the density surface, and the field lines between calls, so that the frames of an animation compute
+    them once; the key `anim` of p ({"height": apex height [R_sun]}) places the shell of that height at p["time"]."""
     from .paths import colormap_rule
     p = merge(default_config(), colormap_rule(p or {}))    # radio_colormaps without radio_colors: as for a config.json
     from .pb import resolve
     p = resolve(p)                                         # density_scale "pb": the scale fitted by corona3d pb
-    if p.get("wl_at") == "burst":
+    anim = p.get("anim")
+    if anim:                                               # one frame of an animation: the shell of this height now
+        p = dict(p)
+        p["gcs_wl"] = dict(p["gcs"], height=float(anim["height"]), time=p["time"])
+        p["wl_time"], p["wl_at"] = p["time"], "burst"
+        p["wl_shell"] = dict(height=p["gcs_wl"]["height"], assumed=False, note="", time=p["time"])
+    elif p.get("wl_at") == "burst":
         p = burst_shell(p)
     on = dict(ON, **(on or {}))
-    sc = {"times": {"shell": p["time"]}}
+    cache = {} if cache is None else cache
+    sc = {"times": {"shell": p["time"]}, "_poly": cache.setdefault("_poly", {})}
     m = None
     if on["surface"] or on["open"] or on["closed"] or on["streamer"]:
-        m = mast_model.load(model_dir(data_root, p), density_scale=p["density_scale"],
-                            va_density=p["va_density"])
+        if "m" not in cache:
+            cache["m"] = mast_model.load(model_dir(data_root, p), density_scale=p["density_scale"],
+                                         va_density=p["va_density"])
+        m = cache["m"]
         R = Rotation.from_euler("z", p["model_dlon"], degrees=True).as_matrix()
     if on["surface"]:
-        iso = build_surface(m, p)
-        iso.points = iso.points @ R.T
-        sc["surface"] = iso.compute_normals(auto_orient_normals=True)
-    if on["open"] or on["closed"] or on["streamer"]:
+        if "surface" not in cache:
+            iso = build_surface(m, p)
+            iso.points = iso.points @ R.T
+            cache["surface"] = iso.compute_normals(auto_orient_normals=True)
+        sc["surface"] = cache["surface"]
+    tracer = None
+    if (on["open"] or on["closed"]) and "lines" not in cache or on["streamer"] and "streamer" not in cache:
         tracer = FieldTracer(m)
     if on["open"] or on["closed"]:
-        lines = tracer.field_lines(fibonacci_sphere(p["n_seeds"], p["seed_r"]) @ R)
-        n = {k: sum(kk == k for _, kk in lines) for k in (OPEN, CLOSED)}
-        sc["open"] = clip([x @ R.T for x, k in lines if k == OPEN], p["line_r_max"])
-        sc["closed"] = clip([x @ R.T for x, k in lines if k == CLOSED], p["line_r_max"])
-        print(f"field lines: {n[OPEN]} open, {n[CLOSED]} closed, "
-              f"{len(lines) - n[OPEN] - n[CLOSED]} undetermined (not drawn)")
+        if "lines" not in cache:
+            lines = tracer.field_lines(fibonacci_sphere(p["n_seeds"], p["seed_r"]) @ R)
+            n = {k: sum(kk == k for _, kk in lines) for k in (OPEN, CLOSED)}
+            cache["lines"] = (clip([x @ R.T for x, k in lines if k == OPEN], p["line_r_max"]),
+                              clip([x @ R.T for x, k in lines if k == CLOSED], p["line_r_max"]))
+            print(f"field lines: {n[OPEN]} open, {n[CLOSED]} closed, "
+                  f"{len(lines) - n[OPEN] - n[CLOSED]} undetermined (not drawn)")
+        sc["open"], sc["closed"] = cache["lines"]
     shell = shell_of(p["gcs"], p, p["time"]) if (on["gcs"] or on["streamer"]) else None
     if on["gcs"]:
         sc["gcs"] = shell
-        if any(on[i] for i in WL) and p.get("gcs_wl"):
+        if (any(on[i] for i in WL) or anim) and p.get("gcs_wl"):
             sc["gcs"] = shell_of(p["gcs_wl"], p, p["gcs_wl"]["time"])   # shell at the image time
             sc["times"]["shell"] = p["gcs_wl"]["time"]
             if p.get("wl_shell"):
@@ -205,13 +221,15 @@ def reconstruct(p=None, on=None, data_root="."):
         sc["gcs_scalars"] = shell_scalars(p, sc["gcs"], g, data_root, m)
     if on["streamer"]:
         # closed lines threaded by the CME shell: traced from every vertex of the shell above
-        # the inner boundary of the model
-        pts = shell.reshape(-1, 3)
-        lines = tracer.field_lines(pts[np.linalg.norm(pts, axis=1) > 1.02] @ R)
-        n = {k: sum(kk == k for _, kk in lines) for k in (OPEN, CLOSED)}
-        sc["streamer"] = clip([x @ R.T for x, k in lines if k == CLOSED], p["line_r_max"])
-        print(f"lines through the CME shell: {n[CLOSED]} closed, {n[OPEN]} open, "
-              f"{len(lines) - n[OPEN] - n[CLOSED]} undetermined, of {len(lines)}")
+        # the inner boundary of the model (of the shell of the fit in an animation: traced once)
+        if "streamer" not in cache:
+            pts = shell.reshape(-1, 3)
+            lines = tracer.field_lines(pts[np.linalg.norm(pts, axis=1) > 1.02] @ R)
+            n = {k: sum(kk == k for _, kk in lines) for k in (OPEN, CLOSED)}
+            cache["streamer"] = clip([x @ R.T for x, k in lines if k == CLOSED], p["line_r_max"])
+            print(f"lines through the CME shell: {n[CLOSED]} closed, {n[OPEN]} open, "
+                  f"{len(lines) - n[OPEN] - n[CLOSED]} undetermined, of {len(lines)}")
+        sc["streamer"] = cache["streamer"]
     if on["radio"]:
         sc["radio"], sc["radio_contours"], sc["radio_blobs"] = radio_points(p), [], []
         from . import nrh, ovro_lwa
@@ -342,6 +360,7 @@ def opacities(value, n):
 
 
 def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
+    """One panel as an image array; out is the folder of the PNG file name.png (None: no file)."""
     op = p["opacity"]
     pl = pv.Plotter(off_screen=True, window_size=p["window"])
     pl.set_background("white")
@@ -360,7 +379,10 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
             lines = sc[key]
             if key == "streamer" and len(lines) > p["streamer_max_lines"]:    # an even subset
                 lines = [lines[i] for i in np.linspace(0, len(lines) - 1, p["streamer_max_lines"]).astype(int)]
-            pl.add_mesh(polyline(lines), **kw)
+            poly = sc.get("_poly", {})                          # drawn again for every panel and frame: built once
+            if key not in poly:
+                poly[key] = polyline(lines)
+            pl.add_mesh(poly[key], **kw)
     if on["gcs"] and sc.get("gcs_scalars"):                # the shell coloured by a shock quantity
         label, vals, cmap, lim = sc["gcs_scalars"]
         poly = polyline(list(sc["gcs"]))
@@ -411,7 +433,7 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
     for inst in IMAGES_OF.get(owner, ()):
         if on[inst]:
             v = sc[inst]["wl"]
-            lim = np.nanpercentile(np.abs(v), 98)
+            lim = (p.get("wl_clim") or {}).get(inst) or np.nanpercentile(np.abs(v), 98)   # wl_clim: fixed in an animation
             pl.add_mesh(sc[inst], scalars="wl", cmap="gray", clim=(-lim, lim),
                         nan_opacity=0.0, opacity=p.get("wl_opacity", op["wl"]), show_scalar_bar=False,
                         lighting=False)
@@ -435,7 +457,7 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
         pl.camera.position = tuple(focal + 100.0 * np.asarray(cam_dir))
         pl.camera.parallel_scale = half
         pl.camera.clipping_range = (1.0, 250.0)
-    img = pl.screenshot(str(out / f"{name}.png"), return_img=True)
+    img = pl.screenshot(None if out is None else str(out / f"{name}.png"), return_img=True)
     pl.close()
     return img
 
@@ -481,30 +503,127 @@ def parse_view(text):
     return i, dict(lon=nums[0], lat=nums[1], roll=nums[2] if len(nums) > 2 else 0.0)
 
 
-def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=None, **layers):
-    """Render the three-panel figure.
+NAMES = ("earth", "north", "stereo", "solo")
+LAYOUTS = ("landscape", "portrait", "separate")
+LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
-    data_root: working directory (its config.json, if present, is read); out: path of the
-    figure, relative to data_root unless absolute; params: configuration keys that replace
-    those of config.json (nested keys may be partial); layers: any of LAYERS as True/False;
-    half: panel half-height [R_sun] for all panels (default: the framing of the configuration,
-    or wide enough for the white-light images that are switched on).
-    """
-    bad = set(layers) - set(LAYERS)
-    if bad:
-        raise ValueError(f"unknown layers {sorted(bad)}; choose from {', '.join(LAYERS)}")
-    if half is not None and half <= 0:
-        raise ValueError("half must be positive")
-    on = dict(ON, **layers)
-    p = merge(config(data_root), params)
-    check_opacity(dict(p["opacity"], **({"wl": p["wl_opacity"]} if "wl_opacity" in p else {})))
-    out = Path(out) if Path(out).is_absolute() else Path(data_root) / out
-    out.parent.mkdir(parents=True, exist_ok=True)
-    sc = reconstruct(p, on, data_root)
 
+def view_key(v):
+    """Short name of a view entry, used in file names: earth, north, stereo, solo, or lon120_lat-10."""
+    return v.get("from") or f"lon{v['lon']:g}_lat{v['lat']:g}"
+
+
+def select_views(p, panels=None):
+    """[(key, view entry)] of the panels to draw. Without `panels`: the views of the configuration. With
+    `panels` (a list of texts, each a comma list of observers, earth, north, stereo, solo, or one
+    "lon,lat[,roll]" of Carrington degrees): those views in that order, with the framing of the same observer
+    in the configuration if it has one."""
+    cfg = p["views"]
+    if not panels:
+        return [(view_key(v), v) for v in cfg]
+    out = []
+    for text in ([panels] if isinstance(panels, str) else panels):
+        parts = [t.strip() for t in text.split(",") if t.strip()]
+        try:
+            nums = [float(t) for t in parts]
+        except ValueError:
+            for t in parts:
+                t = {"stereo_a": "stereo", "stereo_b": "stereo"}.get(t, t)
+                if t not in NAMES:
+                    raise ValueError(f"panel {t!r}: choose from {', '.join(NAMES)}, or give lon,lat[,roll]")
+                out.append(next(((t, v) for v in cfg if v.get("from") == t), (t, {"from": t})))
+            continue
+        if not 2 <= len(nums) <= 3:
+            raise ValueError(f"panel {text!r}: give lon,lat or lon,lat,roll in degrees")
+        v = dict(lon=nums[0], lat=nums[1], roll=nums[2] if len(nums) > 2 else 0.0)
+        out.append((view_key(v), v))
+    return out
+
+
+def _geometry(n, layout):
+    """Figure size [in], the positions (fractions of the figure) of the n panels, and those of the colour bars
+    below them. Landscape: one row, 16 in wide up to three panels (the layout of Fig. 7), wider beyond that;
+    portrait: one column of panels over the colour bars."""
+    if layout == "portrait":
+        W, hp = 7.0, 5.28
+        slot = hp + 0.1
+        H = 0.833 + n * slot
+        panels = [[0.005, (0.833 + (n - 1 - i) * slot) / H, 0.99, hp / H] for i in range(n)]
+        f = lambda x: x / W
+        strip = dict(legend=0.003, time=(f(1.7), f(1.0), f(2.2)), va=(f(3.9), f(1.8), f(3.85)),
+                     shell=(f(5.9), f(1.0), f(6.4)), y=lambda y: y * 4.9 / H, portrait=True)
+        return W, H, panels, strip
+    W, H = max(16.0, 16.0 * n / 3), 4.9
+    off = 0.333 * (3 - n) / 2 if n < 3 else 0.0           # fewer than three panels are centred
+    panels = [[16 * (0.005 + off + i * 0.333) / W, 0.17, 16 * 0.325 / W, 0.81] for i in range(n)]
+    s = lambda f16: (f16 * 16 + (W - 16) / 2) / W
+    strip = dict(legend=0.003 * 16 / W, time=(s(0.155), 0.1 * 16 / W, s(0.205)), va=(s(0.40), 0.24 * 16 / W, s(0.395)),
+                 shell=(s(0.73), 0.18 * 16 / W, s(0.725)), y=lambda y: y, portrait=False)
+    return W, H, panels, strip
+
+
+def _figure(items, sc, on, p, layout):
+    """The figure of the panels items = [(title, image, notes)] in one row or column, with the colour bars."""
+    W, H, rects, g = _geometry(len(items), layout)
+    Y = g["y"]
+    fig = Figure(figsize=(W, H))              # no GUI backend: drawn off screen
+    for (title, img, notes), rect in zip(items, rects):
+        ax = fig.add_axes(rect)
+        ax.imshow(img)
+        ax.set_xticks([]), ax.set_yticks([])
+        lab, txt = title.split(" ", 1)
+        ax.text(0.01, 0.985, lab, transform=ax.transAxes, fontsize=15, va="top")
+        ax.text(0.06, 0.97, txt, transform=ax.transAxes, fontsize=15, va="top",
+                bbox=dict(fc="white", ec="none", alpha=0.85))
+        ax.text(0.99, 0.985, "\n".join(notes), transform=ax.transAxes, fontsize=8, va="top",
+                ha="right", bbox=dict(fc="white", ec="none", alpha=0.7))
+    if on["surface"]:
+        x, w, xl = g["va"]
+        cax = fig.add_axes([x, Y(0.07), w, Y(0.05)])
+        cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(*p["va_range"]), "Spectral_r"),
+                          cax=cax, orientation="horizontal")
+        cb.ax.tick_params(labelsize=12)
+        fig.text(xl, Y(0.095), r"$v_A$ (km/s)", ha="right", va="center", fontsize=14)
+    if on["radio"] and sc.get("radio_legend"):
+        # which colour is which frequency, and how the lightness of a blob gives the time of its image
+        from matplotlib.lines import Line2D
+        hs = [Line2D([], [], ls="", marker="o", ms=9, mfc=c, mec="black", label=lab) for lab, c in sc["radio_legend"]]
+        fig.legend(handles=hs, loc="lower left", bbox_to_anchor=(g["legend"], 0.0), fontsize=8, frameon=False,
+                   handletextpad=0.1, labelspacing=0.25, borderaxespad=0.3)
+        T0, T1 = sc["radio_time"]
+        x, w, xl = g["time"]
+        cax = fig.add_axes([x, Y(0.07), w, Y(0.05)])
+        grey = colors.ListedColormap(chain_colours("#808080", np.linspace(0, 1, 256)))
+        cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(0, 1), grey), cax=cax, orientation="horizontal",
+                          ticks=[0, 1])
+        cb.ax.set_xticklabels([f"{T0:%H:%M:%S}", f"{T1:%H:%M:%S}"])
+        cb.ax.tick_params(labelsize=10)
+        fig.text(xl, Y(0.135), "radio image time (UT)", ha="center", fontsize=10)
+    if on["gcs"] and sc.get("gcs_scalars"):
+        label, _, cmap, lim = sc["gcs_scalars"]
+        x, w, xl = g["shell"]
+        cax = fig.add_axes([x, Y(0.07), w, Y(0.05)])
+        cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(*lim), cmap), cax=cax, orientation="horizontal")
+        cb.ax.tick_params(labelsize=12)
+        if g["portrait"]:
+            fig.text(xl, Y(0.135), f"shell {label}", ha="center", va="center", fontsize=10)
+        else:
+            fig.text(xl, Y(0.095), f"shell {label}", ha="right", va="center", fontsize=14)
+    frame = sc["times"].get("frame")
+    if frame:                                              # the frame time of an animation, large
+        fig.text(0.995, Y(0.02), f"{str(frame)[11:19]} UT", ha="right", va="bottom", fontsize=16)
+    return fig
+
+
+def compose(sc, on, p, half=None, panels=None, layout="landscape"):
+    """Draw the panels of the reconstruction sc and put them on figures; returns [(key, Figure)]: one figure
+    for landscape (1 x N) or portrait (N x 1), and one per panel for separate."""
+    if layout not in LAYOUTS:
+        raise ValueError(f"layout {layout!r}: choose from {', '.join(LAYOUTS)}")
     names = {"earth": "Earth", "north": "North Pole", "stereo": f"STEREO {p['stereo_sc']}", "solo": "Solar Orbiter"}
+    sel = select_views(p, panels)
     imgs, titles, owners = [], [], []
-    for i, v in enumerate(p["views"]):
+    for i, (_, v) in enumerate(sel):
         d, up, owner = view_geometry(v, p)
         wide = (6.0 if on["c2"] else None) if owner == "earth" else \
             (6.0 if on["cor2"] else 4.0 if on["cor1"] else None) if owner == "stereo" else None
@@ -513,13 +632,14 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
         fr = v.get("frame", [1.6, 0.0, 0.0])
         h = half if half is not None else (wide or fr[0])
         name = names.get(v.get("from")) or f"lon {v['lon']:g}°, lat {v['lat']:g}°"
-        titles.append(v.get("title") or f"{'abc'[i]}. {name}")
+        titles.append(v.get("title") or f"{LETTERS[i]}. {name}")
         owners.append(owner)
-        imgs.append(render(sc, on, p, d, up, (h, fr[1], fr[2]), owner, out.parent, f"view_{'abc'[i]}", fr[0]))
+        imgs.append(render(sc, on, p, d, up, (h, fr[1], fr[2]), owner, p.get("_png_dir"), f"view_{LETTERS[i]}", fr[0]))
 
     t = sc["times"]
     height = f", {t['shell_height']}" if t.get("shell_height") else ""
-    notes = [[f"model {p['run'].split('/')[0]}, shell {str(t['shell'])[11:16]} UT{height}"] for _ in imgs]
+    shell_t = str(t["shell"])[11:19 if t.get("frame") else 16]
+    notes = [[f"model {p['run'].split('/')[0]}, shell {shell_t} UT{height}"] for _ in imgs]
     for i in range(len(notes)):
         for label, ta, tb_, n in t.get("radio", []):
             notes[i].append(f"{label}, {n} images {ta:%H:%M:%S}-{tb_:%H:%M:%S} UT")
@@ -531,43 +651,55 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
                 gap = (t.get("wl_gap") or {}).get(inst)
                 if gap is not None:
                     notes[i][-1] += f", nearest frame, {abs(gap):.0f} min {'after' if gap > 0 else 'before'} the burst"
-    fig = Figure(figsize=(16, 4.9))           # no GUI backend: drawn off screen
-    for i, (title, img) in enumerate(zip(titles, imgs)):
-        ax = fig.add_axes([0.005 + i * 0.333, 0.17, 0.325, 0.81])
-        ax.imshow(img)
-        ax.set_xticks([]), ax.set_yticks([])
-        lab, txt = title.split(" ", 1)
-        ax.text(0.01, 0.985, lab, transform=ax.transAxes, fontsize=15, va="top")
-        ax.text(0.06, 0.97, txt, transform=ax.transAxes, fontsize=15, va="top",
-                bbox=dict(fc="white", ec="none", alpha=0.85))
-        ax.text(0.99, 0.985, "\n".join(notes[i]), transform=ax.transAxes, fontsize=8, va="top",
-                ha="right", bbox=dict(fc="white", ec="none", alpha=0.7))
-    if on["surface"]:
-        cax = fig.add_axes([0.40, 0.07, 0.24, 0.05])
-        cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(*p["va_range"]), "Spectral_r"),
-                          cax=cax, orientation="horizontal")
-        cb.ax.tick_params(labelsize=12)
-        fig.text(0.395, 0.095, r"$v_A$ (km/s)", ha="right", va="center", fontsize=14)
-    if on["radio"] and sc.get("radio_legend"):
-        # which colour is which frequency, and how the lightness of a blob gives the time of its image
-        from matplotlib.lines import Line2D
-        hs = [Line2D([], [], ls="", marker="o", ms=9, mfc=c, mec="black", label=lab) for lab, c in sc["radio_legend"]]
-        fig.legend(handles=hs, loc="lower left", bbox_to_anchor=(0.003, 0.0), fontsize=8, frameon=False,
-                   handletextpad=0.1, labelspacing=0.25, borderaxespad=0.3)
-        T0, T1 = sc["radio_time"]
-        cax = fig.add_axes([0.155, 0.07, 0.1, 0.05])
-        grey = colors.ListedColormap(chain_colours("#808080", np.linspace(0, 1, 256)))
-        cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(0, 1), grey), cax=cax, orientation="horizontal",
-                          ticks=[0, 1])
-        cb.ax.set_xticklabels([f"{T0:%H:%M:%S}", f"{T1:%H:%M:%S}"])
-        cb.ax.tick_params(labelsize=10)
-        fig.text(0.205, 0.135, "radio image time (UT)", ha="center", fontsize=10)
-    if on["gcs"] and sc.get("gcs_scalars"):
-        label, _, cmap, lim = sc["gcs_scalars"]
-        cax = fig.add_axes([0.73, 0.07, 0.18, 0.05])
-        cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(*lim), cmap), cax=cax, orientation="horizontal")
-        cb.ax.tick_params(labelsize=12)
-        fig.text(0.725, 0.095, f"shell {label}", ha="right", va="center", fontsize=14)
-    fig.savefig(out, dpi=150)
-    print("saved", out)
-    return out
+    items = list(zip(titles, imgs, notes))
+    if layout == "separate":
+        keys, seen = [], {}
+        for k, _ in sel:
+            seen[k] = seen.get(k, 0) + 1
+            keys.append(k if seen[k] == 1 else f"{k}_{seen[k]}")
+        return [(k, _figure([it], sc, on, p, "portrait")) for k, it in zip(keys, items)]
+    return [(None, _figure(items, sc, on, p, layout))]
+
+
+def fig_array(fig, dpi=150):
+    """The pixels (rows x columns x 3, uint8) of a figure drawn at dpi."""
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    canvas = FigureCanvasAgg(fig)
+    fig.set_dpi(dpi)
+    canvas.draw()
+    return np.asarray(canvas.buffer_rgba())[..., :3].copy()
+
+
+def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=None, panels=None, layout="landscape",
+                **layers):
+    """Render the figure of the panels.
+
+    data_root: working directory (its config.json, if present, is read); out: path of the
+    figure, relative to data_root unless absolute; params: configuration keys that replace
+    those of config.json (nested keys may be partial); layers: any of LAYERS as True/False;
+    half: panel half-height [R_sun] for all panels (default: the framing of the configuration,
+    or wide enough for the white-light images that are switched on); panels: the views to draw
+    (select_views; default: the three views of the configuration); layout: "landscape" (one row,
+    the default), "portrait" (one column), or "separate" (one file per panel, with the name of the
+    view appended to out, e.g. corona3d_earth.png). Returns the path, or the list of paths for "separate".
+    """
+    bad = set(layers) - set(LAYERS)
+    if bad:
+        raise ValueError(f"unknown layers {sorted(bad)}; choose from {', '.join(LAYERS)}")
+    if half is not None and half <= 0:
+        raise ValueError("half must be positive")
+    on = dict(ON, **layers)
+    p = merge(config(data_root), params)
+    check_opacity(dict(p["opacity"], **({"wl": p["wl_opacity"]} if "wl_opacity" in p else {})))
+    out = Path(out) if Path(out).is_absolute() else Path(data_root) / out
+    out.parent.mkdir(parents=True, exist_ok=True)
+    select_views(p, panels)                                  # a wrong panel stops before the data are read
+    sc = reconstruct(p, on, data_root)
+    p["_png_dir"] = out.parent                               # the image of every panel is kept as view_a.png, ...
+    paths = []
+    for key, fig in compose(sc, on, p, half, panels, layout):
+        path = out if key is None else out.with_name(f"{out.stem}_{key}{out.suffix}")
+        fig.savefig(path, dpi=150)
+        paths.append(path)
+        print("saved", path)
+    return paths if layout == "separate" else paths[0]
