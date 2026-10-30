@@ -2,7 +2,9 @@
 
 # corona3d
 
-> **Public** (pre-release). corona3d is ready for use and for testing, although its results can still change between versions, and problems, wrong results, and suggestions are welcome on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, please use [CITATION.cff](CITATION.cff); the Zenodo DOI will be added with the next release.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23801369.svg)](https://doi.org/10.5281/zenodo.23801369)
+
+> **Public** (pre-release). corona3d is ready for use and for testing, although its results can still change between versions, and problems, wrong results, and suggestions are welcome on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, please use [CITATION.cff](CITATION.cff); the Zenodo concept DOI [10.5281/zenodo.23801369](https://doi.org/10.5281/zenodo.23801369) always resolves to the latest version, and version 0.2.0 has [10.5281/zenodo.23801370](https://doi.org/10.5281/zenodo.23801370).
 
 ## Purpose
 
