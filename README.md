@@ -2,7 +2,7 @@
 
 # corona3d
 
-> **corona3d is private** (pre-release 0.1.0). It is ready for use and for testing, although its results can still change between versions, and problems, wrong results, and suggestions are welcome on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, please use [CITATION.cff](CITATION.cff), to which a DOI will be added when the repository is made public.
+> **Public** (pre-release). corona3d is ready for use and for testing, although its results can still change between versions, and problems, wrong results, and suggestions are welcome on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, please use [CITATION.cff](CITATION.cff); the Zenodo DOI will be added with the next release.
 
 ## Purpose
 
@@ -38,7 +38,7 @@ corona3d needs Python 3.12 or newer, because PyThea 1.3, which builds the GCS sh
 pip install "corona3d[all]"
 ```
 
-Until then, pip installs it from the repository, which is private at present, so the account used by git must have access to it:
+Until then, pip installs it directly from the public repository:
 
 ```
 pip install "corona3d[all] @ git+https://github.com/jovian-explorer/corona3d.git"
