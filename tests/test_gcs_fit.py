@@ -471,3 +471,16 @@ def test_the_height_bound_is_recorded_in_the_fit_provenance():
                t_out=dict(out["t_ref"], height=1.77, time="t"), fit=dict(height_t_out=1.77, assumed=True, note="n"))
     out["t_ref"]["time"] = "t"
     assert G.config_update(out, (28.0, -14.0), ("cor1a",))["gcs_fit"]["height_bound"]["max"] == 6.0
+
+
+def test_summed_stereo_frames_are_a_programme_of_their_own(tmp_path):
+    """On 2024-05-09 the COR2-A base before the onset was a 256-pixel summed frame, and every full frame was then
+    skipped as another binning; such frames now form their own programme with their own base."""
+    import numpy as np
+    from astropy.io import fits
+    from corona3d import gcs
+    gcs._load()
+    for name, n in (("20240509_170730_d4c2A.fts", 256), ("20240509_165330_d4c2A.fts", 2048), ("20240509_172100_n4c1A.fts", 512)):
+        fits.PrimaryHDU(np.zeros((n, n), np.float32)).writeto(tmp_path / name)
+    assert [gcs.seq(tmp_path / n) for n in ("20240509_170730_d4c2A.fts", "20240509_165330_d4c2A.fts", "20240509_172100_n4c1A.fts")] \
+        == ["d4x256", "d4", "n4"]

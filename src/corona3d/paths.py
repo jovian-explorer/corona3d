@@ -83,15 +83,35 @@ def legacy(user):
             user.setdefault("radio_colormaps", nrh.pop("colormaps"))
         if "radio_images" not in user:
             user["radio_images"] = [dict(nrh, instrument="nrh")]
+    return colormap_rule(user)
+
+
+def colormap_rule(user):
+    """Colour maps chosen by the user (not those that `init` and `new` write) replace the default radio colours:
+    `radio_colors` becomes None unless it is given. Returns a new dictionary."""
+    user = dict(user)
+    old = ["spring", "winter", "autumn", "summer"]  # the colour maps that configs written by `init` and `new` carry
+    cm_ = user.get("radio_colormaps")
+    if cm_ and list(cm_) != old[:len(cm_)]:
+        user.setdefault("radio_colors", None)
     return user
 
 
 def config(h):
     """The default event, updated key by key with the working directory's config.json (if any);
-    keys of older versions are converted (see `legacy`)."""
+    keys of older versions are converted (see `legacy`), and `density_scale` "pb" is replaced by the scale of
+    `pb_fit` (corona3d.pb.resolve)."""
     f = Path(h) / "config.json"
     user = legacy(json.loads(f.read_text(encoding="utf-8"))) if f.exists() else {}
-    return merge(default_config(), user)
+    from .pb import resolve
+    cfg = merge(default_config(), user)
+    try:
+        return resolve(cfg)                               # density_scale "pb" becomes the scale fitted by corona3d pb
+    except ValueError:                                    # no pb_fit yet: every command must still start (corona3d pb makes it)
+        import warnings
+        warnings.warn('config.json has density_scale "pb" but no pb_fit; the default density scale is used until '
+                      '`corona3d pb` has been run (reconstruct, shock, sources and spectra stop until then)', stacklevel=2)
+        return dict(cfg, density_scale=default_config()["density_scale"], density_scale_pending_pb=True)
 
 
 def model_dir(h, cfg):

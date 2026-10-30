@@ -1,4 +1,5 @@
-"""corona3d command line: doctor, init, new, fetch, radio-interval, gcs, event, render, export, shock."""
+"""corona3d command line: doctor, init, new, fetch, radio-interval, gcs, event, render, export, shock, pb, sources,
+spectra."""
 import argparse
 import json
 import shutil
@@ -76,6 +77,10 @@ def _main(argv=None):
     f.add_argument("--cor1a", action="store_true", help="also the STEREO-A COR1 images (for corona3d gcs)")
     f.add_argument("--euv", action="store_true",
                    help="only the SDO/AIA 193 and 211 A and STEREO/EUVI 195 A images of euv_window (for corona3d gcs --euv)")
+    f.add_argument("--solo", action="store_true",
+                   help="only the Solar Orbiter images from the SOAR: Metis tB and pB (data/wl) and EUI/FSI 174 A (data/euv) "
+                        "of wl_window, and the position of the spacecraft from their headers (config.json solo)")
+    f.add_argument("--solohi", action="store_true", help="with --solo, also the SoloHI images (data/solohi)")
     f.add_argument("--ovro-lwa", action="store_true",
                    help="only the OVRO-LWA images of the radio_images entries (public AWS bucket)")
     f.add_argument("--nrh", action="store_true",
@@ -92,7 +97,7 @@ def _main(argv=None):
     g.add_argument("--flare", nargs=2, type=float, metavar=("LON", "LAT"),
                    help="Stonyhurst longitude and latitude of the flare site [deg] that seeds the envelopes")
     g.add_argument("--views", default="c2,cor1a,cor1b", type=gcs_views,
-                   help="instruments: c2, cor1a, cor1b, cor2a, cor2b (legacy stereo_a and stereo_b stand for "
+                   help="instruments: c2, cor1a, cor1b, cor2a, cor2b, metis (Solar Orbiter; corona3d fetch --solo) (legacy stereo_a and stereo_b stand for "
                         "cor1a,cor2a and cor1b,cor2b)")
     g.add_argument("--fix-direction", action="store_true",
                    help="keep the shell axis at the flare site; fit height, aspect ratio, half-angle, and tilt")
@@ -120,7 +125,8 @@ def _main(argv=None):
                     help="measure the apex height at the reconstruction time in the EUV images of data/euv (corona3d fetch "
                          "--euv) with the shape of the white-light fit, in place of the extrapolated height (both are recorded)")
     g.add_argument("--euv-views", type=lambda t: t.split(","), metavar="LIST",
-                    help="EUV views for --euv: aia193, aia211, euvi195a, euvi195b (default: aia193 and the EUVI images present)")
+                    help="EUV views for --euv: aia193, aia211, euvi195a, euvi195b, fsi174 (Solar Orbiter/EUI) (default: aia193, "
+                         "the EUVI and the FSI images present)")
     ev = sub.add_parser("event", help="new, fetch, radio-interval, gcs, and render for an event, with a report",
                         description="Runs every step for one event in the working directory and writes event_report.md; "
                                     "steps already done are skipped.")
@@ -165,7 +171,17 @@ def _main(argv=None):
                     help="measure the apex height at the reconstruction time in the EUV images of data/euv (corona3d fetch "
                          "--euv) with the shape of the white-light fit, in place of the extrapolated height (both are recorded)")
     ev.add_argument("--euv-views", type=lambda t: t.split(","), metavar="LIST",
-                    help="EUV views for --euv: aia193, aia211, euvi195a, euvi195b (default: aia193 and the EUVI images present)")
+                    help="EUV views for --euv: aia193, aia211, euvi195a, euvi195b, fsi174 (Solar Orbiter/EUI) (default: aia193, "
+                         "the EUVI and the FSI images present)")
+    ev.add_argument("--pb", action="store_true",
+                    help="also fit the density scale to the polarised brightness (corona3d pb; section of event_report.md)")
+    ev.add_argument("--sources", action="store_true",
+                    help="also write the radio source positions under every placement "
+                         "(corona3d sources)")
+    ev.add_argument("--ovro-offset", action="store_true",
+                    help="with --sources: also measure the OVRO-LWA quiet-Sun position offset (downloads about 18 image files)")
+    ev.add_argument("--spectra", action="store_true",
+                    help="also analyse the dynamic spectra of the type II burst (corona3d spectra)")
     ev.add_argument("--shock", action="store_true",
                     help="also run corona3d shock (Mach numbers, theta_Bn, speeds, radio height ranges, polarisation), "
                          "draw the shell coloured by the fast-magnetosonic Mach number, and add the section Shock "
@@ -187,7 +203,7 @@ def _main(argv=None):
     r.add_argument("--shell-on-top", action="store_true",
                    help="draw the GCS shell over the model surface, so that a shell close to the Sun stays visible")
     r.add_argument("--view", action="append", default=[], metavar="PANEL=VIEW",
-                   help="viewpoint of a panel: a=earth, b=north, c=stereo, or a Carrington "
+                   help="viewpoint of a panel: a=earth, b=north, c=stereo, c=solo (Solar Orbiter), or a Carrington "
                         "longitude and latitude of the viewing direction with an optional roll, "
                         "e.g. b=300,20 or c=120,-10,45 (repeatable)")
     r.add_argument("--radio-sources", help='JSON list, e.g. [{"freq": 173, "x": -1.1, "y": -0.1}]')
@@ -205,6 +221,14 @@ def _main(argv=None):
     r.add_argument("--radio-height-range", action="store_true",
                    help="draw the range of heights of every radio position over the density models of shock.height_models "
                         "as a segment along the line of sight")
+    r.add_argument("--radio-surface", choices=("sphere", "model"),
+                   help="place the radio sources on the sphere of the four-fold Newkirk height (default) or where the line of "
+                        "sight meets the plasma-frequency surface of the scaled MAS density (config radio_deproject)")
+    r.add_argument("--emission", choices=("H", "F", "auto"),
+                   help="harmonic or fundamental emission of every radio source, or auto from the NRH polarisation "
+                        "(config radio_emission and the emission key of each radio_images entry)")
+    r.add_argument("--scattering", action="store_true",
+                   help="correct the radio positions for the radial shift by scattering (config scattering.apply)")
     r.add_argument("--contour-levels", type=floats, metavar="L1,L2,...",
                    help="contour levels as fractions of the peak of the image, e.g. 0.3,0.5,0.7,0.9 (implies --contours)")
     sk = sub.add_parser("shock", help="Mach numbers, theta_Bn, and speeds of the CME shell, and heights, speeds, and "
@@ -216,6 +240,33 @@ def _main(argv=None):
     sk.add_argument("--out", default="analysis", help="output folder, relative to the working directory")
     sk.add_argument("--no-trace", action="store_true", help="do not trace the field line through every shell point (open or closed)")
     sk.add_argument("--no-radio", action="store_true", help="leave out the radio sources")
+    sk.add_argument("--standoff", action="store_true",
+                    help="also place a shock surface ahead of the shell at the stand-off distance of the local fast-mode Mach "
+                         "number and compute the diagnostics on it (METHODS.md, Section 16)")
+    sk.add_argument("--standoff-radius", choices=("min", "mean"),
+                    help="radius of curvature of the stand-off: 1 / largest principal curvature (min, default) or 1 / mean curvature")
+    sk.add_argument("--mc", type=int, metavar="N", help="ensemble of N members over apex height, speed, density scale, and model runs")
+    sk.add_argument("--mc-seed", type=int, metavar="SEED", help="seed of the ensemble (default 0)")
+    sk.add_argument("--no-connectivity", action="store_true", help="do not trace the field lines of the radio sources to the shock")
+    sk.add_argument("--no-traps", action="store_true", help="do not search for closed loops crossed twice by the shock")
+    sk.add_argument("--no-evolution", action="store_true", help="leave out the diagnostics at a series of times through the burst")
+    sk.add_argument("--evolution-step", type=float, metavar="S", help="time step of the evolution in seconds (default 60)")
+    pbp = sub.add_parser("pb", help="fit the density scale of the model to the polarised brightness of COR1 and C2",
+                         description="Forward-models the Thomson-scattered polarised brightness of the MAS density, compares it "
+                                     "with the calibrated pB of the coronagraphs, and writes the fitted scale to config.json as "
+                                     "pb_fit, which density_scale \"pb\" uses (docs/METHODS.md, Section 17).")
+    pbp.add_argument("--time", help="time of the polarisation sequences (default: the first of wl_window, before the CME)")
+    pbp.add_argument("--out", default="analysis/pb", help="output folder, relative to the working directory")
+    pbp.add_argument("--no-store", action="store_true", help="do not write pb_fit into config.json")
+    so = sub.add_parser("sources", help="heights and positions of the radio sources on the Newkirk sphere and on the MAS "
+                        "plasma surface, for F and H emission, with the scattering correction",
+                        description="Writes analysis/radio_sources.csv (docs/METHODS.md, Sections 18 to 21).")
+    so.add_argument("--out", default="analysis", help="output folder, relative to the working directory")
+    so.add_argument("--ovro-offset", action="store_true",
+                    help="measure the position offset of OVRO-LWA on the quiet Sun (downloads a few image files around the event)")
+    spp = sub.add_parser("spectra", help="dynamic spectra of the type II burst (e-CALLISTO, OVRO-LWA), its lanes, shock speed, "
+                         "and band-split Mach number", description="docs/METHODS.md, Section 22.")
+    spp.add_argument("--out", default="analysis/spectra", help="output folder, relative to the working directory")
     e = sub.add_parser("export", help="write every enabled layer to data files with a JSON metadata sidecar",
                        epilog="layers: " + ", ".join(LAYERS))
     for k in LAYERS:
@@ -279,7 +330,7 @@ def _main(argv=None):
         return
     if a.cmd == "fetch":
         failed, parts = 0, {}
-        everything = not (a.model or a.wl or a.ovro_lwa or a.nrh or a.model_extra or a.euv)
+        everything = not (a.model or a.wl or a.ovro_lwa or a.nrh or a.model_extra or a.euv or a.solo)
         if a.model or everything:
             parts["model"] = fetch.model(h, cfg)
         if a.model_extra:
@@ -287,6 +338,9 @@ def _main(argv=None):
         if a.euv:
             from . import euv
             parts["EUV"] = euv.fetch(h, cfg)
+        if a.solo:
+            from . import solo
+            parts["Solar Orbiter"] = solo.fetch(h, cfg, solohi=a.solohi)
         if a.wl or everything:
             parts["white light"] = fetch.whitelight(h, cfg, cor1a=a.cor1a)
         if a.ovro_lwa or everything:
@@ -312,6 +366,10 @@ def _main(argv=None):
             print("some temperature or flow files failed; the flow is then not subtracted, and without t002 the "
                   "sound and fast-magnetosonic speeds need shock.temperature_k in config.json")
         shock.run(h, cfg, a)
+        return
+    if a.cmd in ("pb", "sources", "spectra"):
+        from importlib import import_module
+        import_module(f"corona3d.{a.cmd}").run(h, cfg, a)
         return
     if a.cmd == "export":
         from .exporting import export
@@ -342,10 +400,17 @@ def _main(argv=None):
             params["shock_speed_km_s"] = a.shell_speed
     if a.radio_height_range:
         params["radio_height_range"] = True
+    if a.radio_surface:
+        params["radio_deproject"] = a.radio_surface
+    if a.emission:
+        params["radio_emission"] = a.emission
+        params["radio_images"] = [{k: v for k, v in e.items() if k != "emission"} for e in cfg["radio_images"]]
+    if a.scattering:
+        params["scattering"] = {"apply": True}
     if a.contours or a.contour_levels:
         params["radio_images"] = [dict(e, contours=True, **({"contour_levels": a.contour_levels}
                                                             if a.contour_levels else {}))
-                                  for e in cfg["radio_images"]]
+                                  for e in params.get("radio_images", cfg["radio_images"])]
     from .reconstruction import make_figure, parse_view
     if a.view:
         views = [dict(v) for v in cfg["views"]]

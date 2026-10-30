@@ -49,6 +49,16 @@
   "streamer_max_lines": 150,
   "radio_sources": [],
   "radio_radius": 0.12,
+  "radio_deproject": "sphere",
+  "radio_emission": "H",
+  "dcp_fundamental": 0.3,
+  "scattering": {
+    "apply": false,
+    "eps2_h_km": [
+      4.5e-05,
+      7e-05
+    ]
+  },
   "radio_images": [
     {
       "instrument": "nrh",
@@ -65,6 +75,15 @@
       "contours": false
     }
   ],
+  "radio_colors": [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#8c564b",
+    "#17becf"
+  ],
+  "radio_time_range": null,
   "radio_colormaps": [
     "spring",
     "winter",

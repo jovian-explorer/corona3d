@@ -1,4 +1,5 @@
-"""LASCO C2 and STEREO (A or B) COR1/COR2 images as planes in the three-dimensional reconstruction.
+"""LASCO C2, STEREO (A or B) COR1/COR2 and Solar Orbiter/Metis images as planes in the three-dimensional
+reconstruction.
 
 Each frame is normalised by its exposure time, binned, compared with the first frame of the
 download window (a ratio, or a difference), rotated to solar north up, and placed on the plane
@@ -21,7 +22,8 @@ from .geometry import observer_basis
 # coplanar STEREO images do not overlap); observer key in the configuration
 INSTR = dict(c2=dict(r=(2.2, 6.0), obs="earth"),
              cor1=dict(r=(1.5, 4.0), obs="stereo"),
-             cor2=dict(r=(4.0, 15.0), obs="stereo"))
+             cor2=dict(r=(4.0, 15.0), obs="stereo"),
+             metis=dict(r=None, obs="solo"))           # Metis: the field from the header (solo.metis_fov)
 NBIN = 256
 
 
@@ -31,6 +33,9 @@ def utc(t):
 
 
 def _time(f):
+    if Path(f).name.startswith("solo_"):               # Solar Orbiter: the time seen from 1 AU
+        from . import solo
+        return solo.frame_time(solo.header_of(f))
     h = fits.getheader(f)
     if h.get("TIME-OBS"):
         return datetime.strptime(h["DATE-OBS"] + " " + h["TIME-OBS"][:8], "%Y/%m/%d %H:%M:%S")
@@ -49,6 +54,9 @@ def _frames(wl_dir, inst, sc="B"):
         return [(_time(f), [f]) for f in fs]
     if inst == "cor2":
         return [(_time(f), [f]) for f in sorted(d.glob(f"*_d4c2{sc}.fts"))]
+    if inst == "metis":
+        from .solo import metis_frames
+        return metis_frames(d)
     out, cur = [], []                                  # COR1: three exposures within 60 s
     for f in sorted(d.glob(f"*_[sn]4c1{sc}.fts"), key=_time):
         if cur and (_time(f) - _time(cur[0])).total_seconds() > 60:
@@ -62,6 +70,12 @@ def _frames(wl_dir, inst, sc="B"):
 def _image(files, shape=None):
     """Exposure-normalised total-brightness map (COR1: tB = 2/3 sum of the three angles), block
     averaged to about NBIN pixels across, and resampled to `shape` if it differs from it."""
+    if Path(files[0]).name.startswith("solo_"):        # calibrated level 2, not divided by the exposure
+        from .solo import load_map
+        m = load_map(files[0])
+        k = max(1, m.data.shape[0] // NBIN)
+        m = m.superpixel([k, k] * u.pix, func=np.mean)
+        return m.resample(u.Quantity(shape[::-1], u.pix)) if shape is not None and m.data.shape != shape else m
     maps = [sunpy.map.Map(f) for f in files]
     data = sum(m.data.astype(float) / m.exposure_time.to_value(u.s) for m in maps)
     if len(maps) == 3:
@@ -71,6 +85,12 @@ def _image(files, shape=None):
     if shape is not None and m.data.shape != shape:
         m = m.resample(u.Quantity(shape[::-1], u.pix))
     return m
+
+
+def field(f):
+    """(inner, outer) edge [R_sun] of the field of an instrument whose INSTR range is None (Metis)."""
+    from .solo import header_of, metis_fov
+    return metis_fov(header_of(f))[:2]
 
 
 WL_MAX_GAP_MIN = 30.0      # a frame farther than this from wl_time is not used
@@ -139,7 +159,7 @@ def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B", neare
     X, Y = np.meshgrid((np.arange(nx) - c[0]) * s, (np.arange(ny) - c[1]) * s)
     v = diff.data.copy()
     r = np.hypot(X, Y)
-    lo, hi = INSTR[inst]["r"]
+    lo, hi = INSTR[inst]["r"] or field(files[0])
     v[(r < lo) | (r > hi)] = np.nan
     ex, ey, _ = observer_basis(*observer)
     P = X[..., None] * ex + Y[..., None] * ey

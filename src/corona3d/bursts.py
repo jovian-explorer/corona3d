@@ -45,7 +45,10 @@ def parse(text, day):
         clock = lambda t: midnight + timedelta(hours=int(t[:2]), minutes=int(t[2:]))
         kind = p[i + 2].split("/")[0]
         speed = float(p[i + 3]) if kind == "II" and len(p) > i + 3 and re.fullmatch(r"\d+(\.\d+)?", p[i + 3]) else None
-        rows.append(dict(type=kind, begin=clock(begin), end=clock(end) if re.fullmatch(r"\d{4}", end) else None,
+        t_end = clock(end) if re.fullmatch(r"\d{4}", end) else None
+        if t_end is not None and t_end < clock(begin):               # the burst crosses midnight
+            t_end += timedelta(days=1)
+        rows.append(dict(type=kind, begin=clock(begin), end=t_end,
                          obs=p[i - 2], freq_mhz=p[i + 1], speed_km_s=speed))
     return sorted(rows, key=lambda r: r["begin"])
 

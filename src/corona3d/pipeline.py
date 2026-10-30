@@ -361,12 +361,52 @@ def run(h, a, log=print):
     if summ:
         from . import shock
         shock.update_report(h, summ)
+    for title, lines in analysis_steps(h, a, model_ok, step, failed, log):      # --pb, --sources, --spectra
+        from .report_sections import update
+        update(h, title, lines)
     step("report", f"wrote {REPORT}")
     st["failed"] = failed
     _save_state(h, st)
     if not figures:
         return 1                                  # a total failure: nothing could be drawn
     return 1 if failed and getattr(a, "strict", False) else 0
+
+
+def analysis_steps(h, a, model_ok, step, failed, log):
+    """`--pb`, `--sources`, `--spectra`: the density scale from the polarised brightness, the radio source positions,
+    and the dynamic spectra; returns [(section title, report lines)]."""
+    out = []
+    todo = [("pb", "Density from the polarised brightness", "analysis/pb"),
+            ("sources", "Radio source positions", "analysis"),
+            ("spectra", "Dynamic spectra", "analysis/spectra")]
+    for key, title, folder in todo:
+        if not getattr(a, key, False):
+            continue
+        if not model_ok:
+            step(key, "model files missing; skipped")
+            continue
+        try:
+            from importlib import import_module
+            mod = import_module(f"corona3d.{key}")
+            if key == "pb":
+                summ, rows = mod.analyse(h, log=log)
+                mod.write(h / folder, summ, rows)
+                mod.store(h, summ)
+                lines = mod.report_lines(summ)
+            elif key == "sources":
+                rows, summ = mod.analyse(h, ovro_offset=bool(getattr(a, 'ovro_offset', False)), log=log)
+                mod.write(h / folder, rows, summ)
+                lines = mod.report_lines(summ)
+            else:
+                summ = mod.analyse(h, log=log)
+                mod.write(h / folder, summ, datetime.fromisoformat(summ["window"][0]))
+                lines = mod.report_lines(summ)
+            out.append((title, lines))
+            step(key, f"written to {folder}")
+        except (SystemExit, Exception) as e:
+            step(key, f"failed ({e})")
+            failed.append(f"{key} ({e})")
+    return out
 
 
 SHOCK_FIGURE = "figures/shock/corona3d.png"
@@ -382,8 +422,9 @@ def shock_step(h, cfg, a, model_ok, step, failed, log):
     try:
         if fetch.model(h, cfg, fetch.EXTRA):
             log("shock: some temperature or flow files failed to download")
-        summ, shell, rtab, tracks = shock.analyse(h, log=log)
-        out = shock.write(h / "analysis", summ, shell, rtab, tracks)
+        tables = {}
+        summ, shell, rtab, tracks = shock.analyse(h, log=log, tables=tables)
+        out = shock.write(h / "analysis", summ, shell, rtab, tracks, tables)
         step("shock", f"diagnostics written to {out.relative_to(h).as_posix()}")
     except (SystemExit, Exception) as e:
         step("shock", f"failed ({e})")

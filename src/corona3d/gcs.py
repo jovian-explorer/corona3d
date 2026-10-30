@@ -32,6 +32,7 @@ import numpy as np
 FLARE = (-69.0, -6.0)                                  # Stonyhurst lon, lat of the flare site (seed of the envelopes)
 FOV = {"c2": (2.3, 6.0, 3.0), "cor1a": (1.5, 4.0, 2.2), "cor1b": (1.5, 4.0, 2.2),
        "cor2a": (3.0, 15.0, 4.0), "cor2b": (3.0, 15.0, 4.0)}                      # r_in, r_out, r_seed
+# "metis" (Solar Orbiter) is added by frames_of from the header, since its field scales with the distance of the spacecraft
 T_REF = "2013-10-25T15:24:30"
 T_OUT = "2013-10-25T15:00:00"
 VIEWS = ("c2", "cor1a", "cor1b")
@@ -300,6 +301,9 @@ def _load():
 
 
 def _t(f):
+    if Path(f).name.startswith("solo_"):               # Solar Orbiter: the time seen from 1 AU (corona3d.solo)
+        from . import solo
+        return solo.frame_time(solo.header_of(f))
     h = fits.getheader(f)
     if h.get("TIME-OBS"):
         return datetime.strptime(h["DATE-OBS"] + " " + h["TIME-OBS"][:8], "%Y/%m/%d %H:%M:%S")
@@ -315,6 +319,12 @@ def frames_of(wl, key):
         return [(_t(f), [f]) for f in fs]
     if key.startswith("cor2"):
         return [(_t(f), [f]) for f in sorted(d.glob(f"*_d4c2{key[-1].upper()}.fts"), key=_t)]
+    if key == "metis":                                 # Solar Orbiter/Metis tB; the field from the header
+        from . import solo
+        fr = solo.metis_frames(d)
+        if fr:
+            FOV["metis"] = solo.metis_fov(solo.header_of(fr[0][1][0]))
+        return fr
     fs = sorted(d.glob(f"*_[sn][45]c1{key[-1].upper()}.fts"), key=_t)
     out, cur = [], []
     for f in fs:                                       # triplets: three exposures within 60 s
@@ -326,6 +336,11 @@ def frames_of(wl, key):
 
 
 def total_b(files):
+    if Path(files[0]).name.startswith("solo_"):        # calibrated Solar Orbiter level 2 (corona3d.solo.load_map)
+        from . import solo
+        m = solo.load_map(files[0])
+        k = m.data.shape[0] // 512
+        return m.superpixel([k, k] * u.pix, func=np.mean) if k > 1 else m
     ms = [sunpy.map.Map(f) for f in files]
     d = sum(m.data.astype(float) / m.exposure_time.to_value(u.s) for m in ms)
     m = sunpy.map.Map(d * (2 / 3 if len(ms) == 3 else 1), ms[0].meta)
@@ -415,9 +430,18 @@ def shell(q, obstime):
 
 
 def seq(f):
-    """Observing programme of a frame (s4/s5 for COR1, one programme for C2): each frame is
-    compared only with a pre-event frame of its own programme."""
-    return f.name.split("_")[-1][:2] if "_" in f.name else "c2"
+    """Observing programme of a frame (s4/s5 for COR1, one programme for C2, the filter for Solar Orbiter,
+    whose FSI 174 A images alternate between two filters of different throughput): each frame is
+    compared only with a pre-event frame of its own programme. A STEREO frame of fewer than 512 pixels
+    (summed on board, as the 256-pixel COR2-A frames of 2024-05-09) is a programme of its own, because
+    total_b cannot bring it to the 512-pixel grid of the full frames."""
+    if f.name.startswith("solo_"):
+        from .solo import header_of
+        return str(header_of(f).get("FILTER") or "solo")
+    if "_" not in f.name:
+        return "c2"
+    n = fits.getheader(f).get("NAXIS1", 512) if f.exists() else 512
+    return f.name.split("_")[-1][:2] + (f"x{n}" if n < 512 else "")
 
 
 def base_cutoff(onset, minutes=BASE_MIN):

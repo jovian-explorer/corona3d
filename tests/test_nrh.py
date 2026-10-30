@@ -71,6 +71,31 @@ def test_radio_layer_draws_a_chain_of_blobs_per_frequency(synthetic_home):
     assert len(sc["radio_contours"]) == 2
 
 
+def test_blob_colours_follow_frequency_and_a_fixed_time_scale(synthetic_home):
+    d = synthetic_home / "data" / "nrh"
+    d.mkdir()
+    write_nrh(d / "nrh2_1509_h60_20131025_145800c00_i.fts", 150.9, T0, 40, lambda k: (-1.0 - 0.01 * k, -0.1))
+    write_nrh(d / "nrh2_4320_h60_20131025_145800c00_i.fts", 432.0, T0, 40, lambda k: (-0.85, -0.2))
+    on = dict(surface=False, sphere=False, open=False, closed=False, streamer=False, gcs=False, radio=True)
+    entry = dict(instrument="nrh", folder="data/nrh", freqs=[150.9, 432.0], start="2013-10-25T14:59:00",
+                 end="2013-10-25T15:01:00", step_s=60, level=0.5, min_tb=1e8, contours=False)
+    rng = ["2013-10-25T14:59:00", "2013-10-25T15:03:00"]
+    short = reconstruct({"radio_images": [entry], "radio_time_range": rng}, on, synthetic_home)
+    long_ = reconstruct({"radio_images": [dict(entry, end="2013-10-25T15:03:00")], "radio_time_range": rng}, on,
+                        synthetic_home)
+    (_, _, a1), (_, _, a2) = short["radio"]
+    (_, _, b1), _ = long_["radio"]
+    assert np.allclose(a1, b1[:len(a1)])                     # a blob keeps its colour as the interval grows
+    assert not np.allclose(a1[0], a2[0])                     # each frequency has its own colour
+    assert [lab for lab, _ in short["radio_legend"]] == ["NRH 150.9 MHz", "NRH 432 MHz"]
+    lum = b1 @ [0.299, 0.587, 0.114]
+    assert (np.diff(lum) < 0).all()                          # later images darker
+    # colour maps chosen by the user (not those that `init` writes) still give the chains their colours
+    from corona3d.paths import legacy
+    assert legacy({"radio_colormaps": ["viridis"]})["radio_colors"] is None
+    assert "radio_colors" not in legacy({"radio_colormaps": ["spring", "winter", "autumn", "summer"]})
+
+
 def test_contours_are_drawn_at_every_level_and_nest_inwards(synthetic_home):
     d = synthetic_home / "data" / "nrh"
     d.mkdir()

@@ -41,7 +41,7 @@ def test_render_of_the_layers_that_need_no_data(tmp_path):
     for f in ("test.png", "view_a.png", "view_b.png", "view_c.png"):
         assert (tmp_path / "figures" / f).stat().st_size > 10_000
     assert set(LAYERS) == {"surface", "sphere", "open", "closed", "streamer", "gcs", "radio",
-                           "c2", "cor1", "cor2"}
+                           "c2", "cor1", "cor2", "metis"}
 
 
 def test_partial_nested_keys_are_merged(tmp_path):

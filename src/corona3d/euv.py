@@ -25,10 +25,11 @@ EUV_SPAN_MIN = 10.0                       # EUV frames within this many minutes 
 H_GRID = np.round(np.arange(1.05, 3.0001, 0.01), 3)
 IOU_TOL = 0.02                            # heights within this IoU of the best give the uncertainty (one frame)
 FOV = {"aia193": (1.02, 1.3, 1.1), "aia211": (1.02, 1.3, 1.1),
-       "euvi195a": (1.02, 1.7, 1.15), "euvi195b": (1.02, 1.7, 1.15)}     # r_in, r_out, r_seed [R_sun]
+       "euvi195a": (1.02, 1.7, 1.15), "euvi195b": (1.02, 1.7, 1.15),
+       "fsi174": (1.02, 2.0, 1.15)}                                     # r_in, r_out, r_seed [R_sun]
 
 
-DEFAULT_VIEWS = ("aia193", "euvi195a", "euvi195b")    # one EUV view per viewpoint; aia211 on request
+DEFAULT_VIEWS = ("aia193", "euvi195a", "euvi195b", "fsi174")    # one EUV view per viewpoint; aia211 on request
 
 
 def euv_dir(h):
@@ -66,9 +67,11 @@ def fetch(h, cfg):
 
 
 def key_of(header):
-    """aia193, aia211, euvi195a, or euvi195b for a FITS header; None for other images."""
+    """aia193, aia211, euvi195a, euvi195b, or fsi174 (Solar Orbiter/EUI) for a FITS header; None for other images."""
     wl = int(round(float(header.get("WAVELNTH", 0) or 0)))
     tel, det = str(header.get("TELESCOP", "")).upper(), str(header.get("DETECTOR", "")).upper()
+    if "EUI" in tel and det == "FSI":
+        return "fsi174" if wl == 174 else None
     if "AIA" in tel or "AIA" in str(header.get("INSTRUME", "")).upper():
         return f"aia{wl}" if wl in (193, 211) else None
     if det == "EUVI" and wl == 195:
@@ -82,6 +85,12 @@ def frames(folder):
     from astropy.io import fits
     out = {}
     for f in sorted(list(Path(folder).glob("*.fts")) + list(Path(folder).glob("*.fits"))):
+        if f.name.startswith("solo_"):                 # Solar Orbiter: compressed image, time seen from 1 AU
+            from . import solo
+            hd = solo.header_of(f)
+            if key_of(hd):
+                out.setdefault(key_of(hd), []).append((solo.frame_time(hd), [f]))
+            continue
         try:
             hd = fits.getheader(f, 1) if f.name.startswith("aia") else fits.getheader(f)
         except Exception:

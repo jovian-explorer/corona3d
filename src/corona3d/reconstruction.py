@@ -2,11 +2,11 @@
 
 MAS/MAST n_e iso-surface coloured by v_A, open and closed field lines, the closed lines threaded
 by the CME shell (the streamer loops), a grey reference sphere, the GCS shell of the CME, radio
-sources at their Newkirk heights as blobs and contours, and LASCO C2 and STEREO COR1, COR2 images.
-Each panel is seen from an observer (Earth, the solar north pole, or the STEREO spacecraft of the
-event) or from any Carrington direction. For the validation event of 2013 October 25 the default
-panels share the viewpoints of Fig. 7 of Morosan et al. (2022), so that the two reconstructions can
-be compared panel by panel.
+sources at their Newkirk heights as blobs and contours, and LASCO C2, STEREO COR1, COR2 and Solar
+Orbiter/Metis images. Each panel is seen from an observer (Earth, the solar north pole, the STEREO
+spacecraft of the event, or Solar Orbiter) or from any Carrington direction. For the validation event
+of 2013 October 25 the default panels share the viewpoints of Fig. 7 of Morosan et al. (2022), so that
+the two reconstructions can be compared panel by panel.
 """
 from datetime import timedelta
 from pathlib import Path
@@ -26,8 +26,9 @@ from .paths import config, default_config, merge, model_dir, wl_dir
 
 pv = need("render", "pyvista", "the drawing of the figure")
 
-WL = ("c2", "cor1", "cor2")
-IMAGES_OF = {"earth": ("c2",), "stereo": ("cor2", "cor1")}
+WL = ("c2", "cor1", "cor2", "metis")
+IMAGES_OF = {"earth": ("c2",), "stereo": ("cor2", "cor1"), "solo": ("metis",)}
+OBSERVERS = ("earth", "stereo", "solo")               # observers with a position in the configuration
 
 
 def newkirk_r(f_mhz, fold=4.0, harmonic=True):
@@ -57,6 +58,15 @@ def radio_points(p):
         xyz = deproject(np.atleast_1d(s["x"]) * k, np.atleast_1d(s["y"]) * k, newkirk_r(s["freq"]), *p["earth"])
         out.append((s["freq"], xyz, np.tile(cm.cool(np.clip((s["freq"] - 150) / 300, 0, 1))[:3], (len(xyz), 1))))
     return out
+
+
+def chain_colours(base, frac):
+    """Colours of the blobs of one frequency: its base colour, light at the start of the radio time
+    range (frac 0), the base colour at the middle, and dark at the end (frac 1)."""
+    rgb = np.asarray(colors.to_rgb(base))
+    f = np.clip(np.asarray(frac, float), 0, 1)[:, None]
+    light, dark = rgb + (1 - rgb) * 0.55, rgb * 0.5
+    return np.where(f < 0.5, light + (rgb - light) * 2 * f, rgb + (dark - rgb) * (2 * f - 1))
 
 
 def clip(lines, r_max):
@@ -155,7 +165,10 @@ def burst_shell(p):
 def reconstruct(p=None, on=None, data_root="."):
     """Build the layers that are switched on; p and on may hold only the keys that differ from
     the defaults. Returns a dictionary of the layers and of the times used."""
-    p = merge(default_config(), p)
+    from .paths import colormap_rule
+    p = merge(default_config(), colormap_rule(p or {}))    # radio_colormaps without radio_colors: as for a config.json
+    from .pb import resolve
+    p = resolve(p)                                         # density_scale "pb": the scale fitted by corona3d pb
     if p.get("wl_at") == "burst":
         p = burst_shell(p)
     on = dict(ON, **(on or {}))
@@ -204,17 +217,35 @@ def reconstruct(p=None, on=None, data_root="."):
         from . import nrh, ovro_lwa
         from .whitelight import utc
         readers = {"nrh": nrh, "ovro_lwa": ovro_lwa}
+        from . import heights
+        ne_cache = []
+        ne_loader = lambda: ne_cache[0] if ne_cache else ne_cache.append(heights.ne_sampler(_model(p, data_root, m), p)) or ne_cache[0]
         names = {"nrh": "NRH", "ovro_lwa": "OVRO-LWA"}
-        j = 0                                              # colour maps run over all frequencies
+        j = 0                                              # colours run over all frequencies
+        # one time scale for every chain, fixed by radio_time_range (default: the start and end of the
+        # entries), so that a blob keeps its colour when the interval is extended, as in an animation
+        ri = p["radio_images"]
+        tr = p.get("radio_time_range") or ([min((rs["start"] for rs in ri), key=utc), max((rs["end"] for rs in ri), key=utc)]
+                                           if ri else [p["time"], p["time"]])
+        T0, T1 = utc(tr[0]), utc(tr[1])
+        span = max((T1 - T0).total_seconds(), 1.0)
+        sc["radio_time"], sc["radio_legend"], sc["radio_contour_colours"] = (T0, T1), [], []
+        base_of = {}                                       # one colour per (instrument, frequency)
         for rs in p["radio_images"]:
             mod, folder = readers[rs["instrument"]], Path(data_root) / rs["folder"]
             if not folder.exists() or not any(folder.iterdir()):
                 print(f"radio: no {names[rs['instrument']]} files in {folder}")
+                j += len(rs["freqs"])                      # the other frequencies keep their colours
                 continue
             t0, t1 = utc(rs["start"]), utc(rs["end"])
             for f in rs["freqs"]:
                 h = newkirk_r(f)
-                cmap = colormaps[p["radio_colormaps"][j % len(p["radio_colormaps"])]]
+                label = f"{names[rs['instrument']]} {f:g} MHz"
+                if p.get("radio_colors"):
+                    base = base_of.setdefault((rs["instrument"], f), p["radio_colors"][len(base_of) % len(p["radio_colors"])])
+                    cmap = None
+                else:
+                    base, cmap = None, colormaps[p["radio_colormaps"][j % len(p["radio_colormaps"])]]
                 j += 1
                 blobs, last = [], None                     # one per step between start and end
                 t = t0
@@ -225,18 +256,24 @@ def reconstruct(p=None, on=None, data_root="."):
                         blobs.append((tf, cx, cy, tb, lines))
                         last = (img, x, y)
                     t += timedelta(seconds=rs["step_s"])
-                label = f"{names[rs['instrument']]} {f:g} MHz"
                 if not blobs:
                     print(f"radio: {label} has no image above {rs['min_tb']:.1e} K between {rs['start']} and {rs['end']}")
                     continue
                 xy = np.array([(cx, cy) for _, cx, cy, _, _ in blobs])
                 xyz = deproject(xy[:, 0], xy[:, 1], h, *p["earth"])
-                colours = cmap(np.linspace(0, 1, len(blobs)))[:, :3]       # early to late
+                if heights.custom(p, rs):                  # model surface, F emission, scattering, or offset (heights.place_blobs)
+                    xyz, r_each, _ = heights.place_blobs(rs, f, xy, [tf for tf, *_ in blobs], p, data_root, ne_loader)
+                    h = float(np.median(r_each))
+                frac = [(tf - T0).total_seconds() / span for tf, *_ in blobs]     # early to late
+                colours = chain_colours(base, frac) if base else cmap(np.clip(frac, 0, 1))[:, :3]
+                if base and (label, base) not in sc["radio_legend"]:
+                    sc["radio_legend"].append((label, base))
                 sc["radio"].append((f, xyz, colours))
                 sc["radio_blobs"].append(dict(instrument=rs["instrument"], freq=f, r=h, xyz=xyz,
                                               time=[tf for tf, *_ in blobs], x=xy[:, 0], y=xy[:, 1],
                                               tb=np.array([b[3] for b in blobs])))
                 if rs["contours"]:                         # of the last image, at each level of its peak
+                    sc["radio_contour_colours"].append(colors.to_rgb(base) if base else cm.cool(np.clip((f - 150) / 300, 0, 1))[:3])
                     levels = sorted(rs.get("contour_levels") or [rs["level"]])
                     sc["radio_contours"].append((f, [(lev, [deproject(c[:, 0], c[:, 1], h, *p["earth"], warn=False)
                                                             for c in nrh.source(*last, lev)[0]])
@@ -252,6 +289,8 @@ def reconstruct(p=None, on=None, data_root="."):
     for inst in WL:
         if on[inst]:
             from .whitelight import INSTR, WL_MAX_GAP_MIN, load_plane, utc
+            if INSTR[inst]["obs"] not in p:
+                raise ValueError(f"{inst}: the configuration has no position of {INSTR[inst]['obs']}; run corona3d fetch --solo")
             burst = p.get("wl_at") == "burst"
             sc[inst], tf, tb = load_plane(inst, wl_dir(data_root), p["wl_time"], p[INSTR[inst]["obs"]],
                                           p["wl_window"], p["wl_mode"], p["stereo_sc"], nearest=burst)
@@ -331,12 +370,11 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
     elif on["gcs"]:
         shell = pl.add_mesh(polyline(list(sc["gcs"])), color=p["mesh_rings"]["color"],
                             line_width=p["mesh_rings"]["width"], opacity=op["gcs"])
-    for f, levels in (sc.get("radio_contours", []) if on["radio"] else []):
+    for (f, levels), rgb in zip(sc.get("radio_contours", []) if on["radio"] else [], sc.get("radio_contour_colours", [])):
         # the levels run from the lowest to the highest, and so do the opacities
         for (lev, lines), a in zip(levels, opacities(op["radio_contours"], len(levels))):
             if lines:
-                pl.add_mesh(polyline(lines), color=cm.cool(np.clip((f - 150) / 300, 0, 1))[:3], line_width=4.0,
-                            opacity=float(a))
+                pl.add_mesh(polyline(lines), color=rgb, line_width=4.0, opacity=float(a))
     if on["radio"] and sc.get("radio_ranges"):             # height range of each source over the density models
         pl.add_mesh(polyline(sc["radio_ranges"]), color="#303030", line_width=3.0, opacity=0.9)
     blobs = []
@@ -346,8 +384,16 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
         cloud["rgb"] = (np.asarray(rgb) * 255).astype(np.uint8)
         if (alpha < 1).any():                                   # one alpha per blob, carried by its colour
             cloud["rgb"] = np.c_[cloud["rgb"], (alpha * 255).round().astype(np.uint8)]
-        blobs += [pl.add_mesh(cloud.glyph(geom=pv.Sphere(radius=p["radio_radius"]), scale=False, orient=False),
-                              scalars="rgb", rgb=True, smooth_shading=True, ambient=0.35, specular=0.4)]
+        glyphs = cloud.glyph(geom=pv.Sphere(radius=p["radio_radius"]), scale=False, orient=False)
+        # flatter lighting keeps the colour (frequency) and its lightness (time) readable, and a black
+        # outline separates the blobs from the model surface beneath them
+        blobs += [pl.add_mesh(glyphs, scalars="rgb", rgb=True, smooth_shading=True, ambient=0.5, diffuse=0.6,
+                              specular=0.1)]
+        if (alpha < 1).any():                                   # each outline fades with its blob
+            blobs += [pl.add_silhouette(pv.Sphere(radius=p["radio_radius"], center=c), color="black", line_width=1.5,
+                                        opacity=float(a)) for c, a in zip(xyz, alpha) if a > 0]
+        else:
+            blobs += [pl.add_silhouette(glyphs, color="black", line_width=1.5)]
     if on["gcs"] and p.get("shell_on_top"):
         # a second layer that shares the camera, so that the shell stays visible where the
         # surface of the model would hide it (a low shell at the time of the burst)
@@ -396,19 +442,21 @@ def render(sc, on, p, cam_dir, up, frame, owner, out, name, base_half=None):
 
 def view_geometry(v, p):
     """Viewing direction (from Sun centre towards the viewer), screen up, and the observer that
-    the view belongs to (earth, stereo, or None) for one entry of the configuration's views.
-    An entry names an observer ("from": "earth", "stereo", or "north") or gives a Carrington
+    the view belongs to (earth, stereo, solo, or None) for one entry of the configuration's views.
+    An entry names an observer ("from": "earth", "stereo", "solo", or "north") or gives a Carrington
     longitude and latitude ("lon", "lat") of the viewing direction; "roll" turns the panel
     counter-clockwise by that angle [deg]."""
     src = v.get("from")
-    if src in ("earth", "stereo"):
+    if src in OBSERVERS:
+        if src not in p:
+            raise ValueError(f"view {v}: the configuration has no position of {src}; for Solar Orbiter run corona3d fetch --solo")
         lon, lat = p[src]
     elif src == "north":
         lon, lat = p["earth"][0], 90.0
     elif src is None and "lon" in v and "lat" in v:
         lon, lat = v["lon"], v["lat"]
     else:
-        raise ValueError(f"view {v}: give 'from' (earth, stereo, north) or 'lon' and 'lat'")
+        raise ValueError(f"view {v}: give 'from' (earth, stereo, solo, north) or 'lon' and 'lat'")
     d = unit_vec(lon, lat)
     if abs(lat) > 89.9:                                  # from a pole: Earth's direction at the bottom
         e = unit_vec(*p["earth"])
@@ -417,17 +465,17 @@ def view_geometry(v, p):
         up = observer_basis(lon, lat)[1]                 # solar north up
     roll = np.radians(v.get("roll", 0.0))
     up = up * np.cos(roll) + np.cross(d, up) * np.sin(roll)
-    return d, up, (src if src in ("earth", "stereo") else None)
+    return d, up, (src if src in OBSERVERS else None)
 
 
 def parse_view(text):
-    """'b=north', 'a=earth', 'c=stereo' (also the legacy 'c=stereo_a' and 'c=stereo_b'), or 'c=300,20[,roll]' -> (panel index, view entry)."""
+    """'b=north', 'a=earth', 'c=stereo', 'c=solo' (also the legacy 'c=stereo_a' and 'c=stereo_b'), or 'c=300,20[,roll]' -> (panel index, view entry)."""
     k, val = text.split("=", 1)
     i = "abc".index(k.strip().lower())
     val = val.strip()
     if val in ("stereo_a", "stereo_b"):                # legacy names: the STEREO spacecraft
         return i, {"from": "stereo", "sc": val[-1].upper()}
-    if val in ("earth", "stereo", "north"):
+    if val in ("earth", "stereo", "north", "solo"):
         return i, {"from": val}
     nums = [float(x) for x in val.split(",")]
     return i, dict(lon=nums[0], lat=nums[1], roll=nums[2] if len(nums) > 2 else 0.0)
@@ -454,12 +502,14 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
     out.parent.mkdir(parents=True, exist_ok=True)
     sc = reconstruct(p, on, data_root)
 
-    names = {"earth": "Earth", "north": "North Pole", "stereo": f"STEREO {p['stereo_sc']}"}
+    names = {"earth": "Earth", "north": "North Pole", "stereo": f"STEREO {p['stereo_sc']}", "solo": "Solar Orbiter"}
     imgs, titles, owners = [], [], []
     for i, v in enumerate(p["views"]):
         d, up, owner = view_geometry(v, p)
         wide = (6.0 if on["c2"] else None) if owner == "earth" else \
             (6.0 if on["cor2"] else 4.0 if on["cor1"] else None) if owner == "stereo" else None
+        if owner == "solo" and on["metis"]:              # the outer edge of the Metis image, which scales with distance
+            wide = float(np.linalg.norm(sc["metis"].points[np.isfinite(sc["metis"]["wl"])], axis=1).max())
         fr = v.get("frame", [1.6, 0.0, 0.0])
         h = half if half is not None else (wide or fr[0])
         name = names.get(v.get("from")) or f"lon {v['lon']:g}°, lat {v['lat']:g}°"
@@ -498,6 +548,20 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
                           cax=cax, orientation="horizontal")
         cb.ax.tick_params(labelsize=12)
         fig.text(0.395, 0.095, r"$v_A$ (km/s)", ha="right", va="center", fontsize=14)
+    if on["radio"] and sc.get("radio_legend"):
+        # which colour is which frequency, and how the lightness of a blob gives the time of its image
+        from matplotlib.lines import Line2D
+        hs = [Line2D([], [], ls="", marker="o", ms=9, mfc=c, mec="black", label=lab) for lab, c in sc["radio_legend"]]
+        fig.legend(handles=hs, loc="lower left", bbox_to_anchor=(0.003, 0.0), fontsize=8, frameon=False,
+                   handletextpad=0.1, labelspacing=0.25, borderaxespad=0.3)
+        T0, T1 = sc["radio_time"]
+        cax = fig.add_axes([0.155, 0.07, 0.1, 0.05])
+        grey = colors.ListedColormap(chain_colours("#808080", np.linspace(0, 1, 256)))
+        cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(0, 1), grey), cax=cax, orientation="horizontal",
+                          ticks=[0, 1])
+        cb.ax.set_xticklabels([f"{T0:%H:%M:%S}", f"{T1:%H:%M:%S}"])
+        cb.ax.tick_params(labelsize=10)
+        fig.text(0.205, 0.135, "radio image time (UT)", ha="center", fontsize=10)
     if on["gcs"] and sc.get("gcs_scalars"):
         label, _, cmap, lim = sc["gcs_scalars"]
         cax = fig.add_axes([0.73, 0.07, 0.18, 0.05])
