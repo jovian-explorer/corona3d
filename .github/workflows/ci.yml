@@ -25,11 +25,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - uses: pyvista/setup-headless-display-action@v3
-      - name: HDF4 library for pyhdf (macOS has no pyhdf wheel for every runner)
-        if: runner.os == 'macOS'
-        run: brew install hdf4
       - name: Install
-        run: python -m pip install ".[test,all]"
+        # Homebrew no longer has hdf4 and the newest pyhdf wheel needs macOS 26, so take the newest wheel
+        run: python -m pip install --prefer-binary ".[test,all]"
       - name: Test installed package (offline tests)
         shell: bash
         run: |
