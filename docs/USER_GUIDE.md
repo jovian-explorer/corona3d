@@ -72,7 +72,7 @@ cd corona3d
 pip install -e ".[all,test]"
 ```
 
-pyhdf provides wheels for Windows, Linux, and recent macOS on Apple processors. On other Macs, the HDF4 library must be installed first with `brew install hdf4`, while `conda install -c conda-forge pyhdf` is an alternative on any system. Since the renderings are drawn off screen, no window opens, and corona3d therefore also runs on a server, provided that VTK finds an OpenGL implementation (Section 13).
+pyhdf provides wheels for Windows, Linux, and macOS on Apple processors. Since the newest of them (0.11.7) requires macOS 26 and Homebrew no longer provides the HDF4 library from which pip would otherwise build pyhdf, older Macs install with `pip install --prefer-binary`, which takes the wheel of pyhdf 0.11.6, while `conda install -c conda-forge pyhdf` is an alternative on any system, including Macs with Intel processors. Since the renderings are drawn off screen, no window opens, and corona3d therefore also runs on a server, provided that VTK finds an OpenGL implementation (Section 13).
 
 `corona3d doctor` reports the version, the installed core packages and extras, the working directory and where it came from, the package data, and whether the archives that corona3d uses answer, namely those of Predictive Science Inc. (PSI), the Virtual Solar Observatory, the data bucket of the Owens Valley Radio Observatory Long Wavelength Array (OVRO-LWA), the National Centers for Environmental Information (NCEI) of the National Oceanic and Atmospheric Administration (NOAA), and the Horizons system of the Jet Propulsion Laboratory (JPL). The option `corona3d doctor --offline` skips this network check. Nothing in the installed package depends on the layout of the repository.
 
@@ -607,7 +607,7 @@ To cite corona3d itself, use [CITATION.cff](https://github.com/jovian-explorer/c
 | `ValueError: wl_time ... lies outside wl_window` or `... is the base frame itself` | Choose a `wl_time` inside the window and after its first frame |
 | `corona3d event --time DATE` stops with `the SWPC event list of ... could not be fetched` | Neither the NCEI archive nor the SWPC FTP server answered, or the day is older than 1996 or newer than the last edited file; give `--time` with a time instead |
 | `corona3d fetch` reports failed or damaged files and ends with exit code 1 | Give the command again; complete files are skipped and the missing ones downloaded |
-| `ImportError` for `pyhdf`, or pip fails to build pyhdf | No wheel for the system; install HDF4 (`brew install hdf4` on macOS) or use `conda install -c conda-forge pyhdf` |
+| `ImportError` for `pyhdf`, or pip fails to build pyhdf | No wheel for the system; repeat the install with `pip install --prefer-binary` or use `conda install -c conda-forge pyhdf` |
 | pip reports that no version of PyThea matches | Python is older than 3.12; install Python 3.12 or newer |
 | The rendering fails with an OpenGL or display error on a Linux server | VTK finds no OpenGL implementation; install `libosmesa6` or run under a virtual display (`xvfb-run corona3d render`) |
 | The panels are blank or show only the white background | The camera sees no layer, for example after all layers are switched off; check the layers and the half-height |
