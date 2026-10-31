@@ -68,9 +68,10 @@ corona3d radio-interval                               # burst interval chosen fr
 corona3d gcs --flare 28 -14 --views c2,cor1a,cor2a    # GCS fit to the coronagraph images
 corona3d render --radio                               # figures/corona3d.png with the radio sources
 corona3d export --format vtk                          # the layers as files for ParaView
+corona3d animate --start 2024-05-09T17:30 --end 2024-05-09T17:40 --step 60 --radio --gif --mp4
 ```
 
-The figures are written to `figures/` together with the image of each panel (`view_a.png`, `view_b.png`, `view_c.png`). Moreover, the [user guide](docs/USER_GUIDE.md) describes every command, option, and parameter, [docs/METHODS.md](docs/METHODS.md) derives how each element of the reconstruction is computed, [docs/LIMITATIONS.md](docs/LIMITATIONS.md) states where the results cannot be trusted, and [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md) lists every method and number with its source and its test.
+The figures are written to `figures/` together with the image of each panel (`view_a.png`, `view_b.png`, `view_c.png`). The options `--panel` and `--layout` of `render` and `animate` choose any views (Earth, solar north, STEREO, Solar Orbiter, or a Carrington direction) and draw them in one row, in one column, or as separate images, while `animate` writes a GIF and an MP4 of the reconstruction through a time interval (user guide, Section 4.1). Moreover, the [user guide](docs/USER_GUIDE.md) describes every command, option, and parameter, [docs/METHODS.md](docs/METHODS.md) derives how each element of the reconstruction is computed, [docs/LIMITATIONS.md](docs/LIMITATIONS.md) states where the results cannot be trusted, and [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md) lists every method and number with its source and its test.
 
 ## Validation: the CME of 2013 October 25
 
