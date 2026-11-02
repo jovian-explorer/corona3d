@@ -223,3 +223,11 @@ def test_shell_colour_and_height_range_are_off_by_default(synthetic_home):
     assert vals.shape == (sc["gcs"].shape[0] * sc["gcs"].shape[1],) and np.nanmax(vals) > 0
     with pytest.raises(ValueError, match="shell_color"):
         reconstruct(dict(p, shell_color="mach_x", shock_speed_km_s=800.0), on, synthetic_home)
+
+
+def test_ensemble_density_range_follows_the_pb_fit():
+    from corona3d.shock import mc_density_range
+    pb = dict(density_scale=0.706, density_scale_source="pb", pb_fit=dict(scale=0.706, p16=0.5884, p84=0.9923))
+    assert mc_density_range(pb, {}) == ([0.5884, 0.9923], "16th to 84th percentiles of the pB fit")
+    assert mc_density_range(dict(density_scale=2.0), {})[0] == [1.5, 3.0]
+    assert mc_density_range(pb, dict(mc_density_scale=[1, 2]))[0] == [1.0, 2.0]

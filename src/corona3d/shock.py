@@ -67,7 +67,7 @@ DEFAULTS = dict(
     mc_seed=0,
     mc_height_err_rsun=None,              # 1-sigma apex height (None: the error of the fit, else 0.15, assumed)
     mc_speed_frac=0.1,                    # 1-sigma of the apex speed as a fraction of it
-    mc_density_scale=[1.5, 3.0],          # density_scale drawn uniformly in this range
+    mc_density_scale=None,                # density_scale drawn uniformly in this range (None: mc_density_range)
     mc_runs="auto",                       # other model runs: "auto" (folders in data/), a list of run names, or []
 )
 
@@ -575,10 +575,21 @@ def neighbour_runs(home, p, s, plasma):
     return out
 
 
+def mc_density_range(p, s):
+    """Range of the ensemble's density scale: shock.mc_density_scale if set; with density_scale "pb" the
+    16th to 84th percentiles of the pB fit (pb_fit p16, p84); else 0.75 to 1.5 times density_scale."""
+    if s.get("mc_density_scale") is not None:
+        return [float(x) for x in s["mc_density_scale"]], "shock.mc_density_scale"
+    fit = p.get("pb_fit") or {}
+    if p.get("density_scale_source") == "pb" and "p16" in fit and "p84" in fit:
+        return [float(fit["p16"]), float(fit["p84"])], "16th to 84th percentiles of the pB fit"
+    return [0.75 * p["density_scale"], 1.5 * p["density_scale"]], "0.75 to 1.5 times density_scale"
+
+
 def ensemble(home, p, s, rings, normals, keep, plasma, m, h, v, speed_given, axis, t0, pts, times, rtab, log=print):
     """Ensemble of shock.mc_samples members over the apex height (normal, 1 sigma from the fit or
     mc_height_err_rsun), the apex speed (normal, mc_speed_frac), the density scale (uniform in
-    mc_density_scale), and the model runs of neighbour_runs. Returns (summary, member rows, radio rows)."""
+    mc_density_range), and the model runs of neighbour_runs. Returns (summary, member rows, radio rows)."""
     from . import shockphys as sp
     rng = np.random.default_rng(int(s["mc_seed"]))
     fit = p.get("gcs_fit") or {}
@@ -593,7 +604,7 @@ def ensemble(home, p, s, rings, normals, keep, plasma, m, h, v, speed_given, axi
         sh, sh_src = 0.15, "0.15 R_sun (assumed; the fit gives no error)"
     sv = float(s["mc_speed_frac"]) * v
     runs = neighbour_runs(home, p, s, plasma)
-    lo, hi = s["mc_density_scale"]
+    (lo, hi), ds_src = mc_density_range(p, s)
     n = int(s["mc_samples"])
     standoff = bool(s["standoff"])
     rows, rad = [], []
@@ -621,7 +632,7 @@ def ensemble(home, p, s, rings, normals, keep, plasma, m, h, v, speed_given, axi
     keys = [k for k in rows[0] if k not in ("member", "run")] if rows else []
     summ = dict(n=n, seed=int(s["mc_seed"]), height_sigma_rsun=sh, height_sigma_source=sh_src, speed_sigma_km_s=sv,
                 speed_sigma_source=f"{s['mc_speed_frac']:g} of the apex speed" + (" (given with --speed)" if speed_given else ""),
-                density_scale=[lo, hi], runs=[r for r, _ in runs], surface="standoff" if standoff else "shell",
+                density_scale=[lo, hi], density_scale_source=ds_src, runs=[r for r, _ in runs], surface="standoff" if standoff else "shell",
                 quantities={k: sp.quantiles([r[k] for r in rows]) for k in keys})
     src = []
     for a in range(len(pts) if rad else 0):
