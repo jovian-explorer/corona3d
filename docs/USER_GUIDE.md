@@ -41,13 +41,13 @@ Contents
 
 ## 1. Install and start
 
-corona3d runs on Windows, macOS, and Linux and needs Python 3.12 or newer, because PyThea 1.3, which builds the shell of the CME, requires it. Once corona3d is released on PyPI, one command installs it with every optional part:
+corona3d runs on Windows, macOS, and Linux and needs Python 3.12 or newer, because PyThea 1.3, which builds the shell of the CME, requires it. It is released on PyPI, and one command installs it with every optional part:
 
 ```
 pip install "corona3d[all]"
 ```
 
-Until then, pip installs it from the GitHub repository, which is private at present, so the account used by git must have access to it:
+The newest development version installs from the GitHub repository:
 
 ```
 pip install "corona3d[all] @ git+https://github.com/jovian-explorer/corona3d.git"

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 (2026-11-04)
+
+- First release on PyPI: `pip install corona3d` (or `pip install "corona3d[all]"` with every extra). A pushed version tag now publishes to PyPI through a trusted publisher, and the README links and images use absolute URLs so that they show on PyPI.
 
 - `corona3d render` chooses the views and the layout of the figure: `--panel` selects any views in any order (`earth`, `north`, `stereo`, `solo`, or Carrington degrees `lon,lat[,roll]`), and `--layout landscape|portrait|separate` draws them in one row (1 x N), in one column (N x 1), or as one image per view. The default three-panel figure is unchanged pixel for pixel (`reconstruction.select_views`, `compose`, `make_figure(panels=, layout=)`).
 - New command `corona3d animate` (`corona3d/animate.py`; USER_GUIDE Section 4.1) writes a GIF and an MP4 of the reconstruction through a time interval, with the same views and layouts. The shell height follows a line through two GCS fits, a speed, or measured EUV or Solar Orbiter heights; the radio sources accumulate up to each frame time; the model surface and field lines are computed once; cameras, colour limits, panel scale, and the radio time range are fixed, and the frame time is on the figure. A GIF uses one shared palette without dithering that reserves the colours of the Alfvén speed map and of the radio blobs. The MP4 needs imageio-ffmpeg (new extra `animate`) or ffmpeg. 10 new offline tests in `tests/test_animate.py`.
@@ -8,7 +10,7 @@
 - The preset `2024-05-09` holds the refit with COR2-A and Metis at 18:50 UT (Stonyhurst longitude 26.0°, latitude +10.2°, κ 0.54, α 10.7°), the apex height of 2.64 ± 0.89 R⊙ at 17:32 UT and the speed of 1474 ± 136 km s⁻¹ (recorded as assumed), the pB density scale, and the sources on the plasma surface of the model.
 - METHODS (Sections 3, 8.3, 16.6, 16.7) and LIMITATIONS (Sections 5, 6, 8) describe the stand-off shock surface, the placement of the sources on the plasma surface, and the pB density scale, with the results of both events with the calibrated density.
 
-## 0.2.0 (2026-10-30)
+## 0.1.1 (2026-10-30)
 
 - Solar Orbiter as an observer (`corona3d/solo.py`; METHODS Section 23, USER_GUIDE Sections 3, 5.6, 6, and 9.3, LIMITATIONS Section 10). `corona3d fetch --solo` downloads from the SOAR, one file at a time, the level-2 Metis tB and pB images into `data/wl/` and the EUI/FSI 174 Å images into `data/euv/` (with `--solohi` also SoloHI into `data/solohi/`), and writes the position of the spacecraft from the image headers to `config.json` (`solo`, `solo_dsun_au`). Metis is the view `metis` of `corona3d gcs`, with its field read from the header (4.13 to 8.77 R⊙ at 0.688 AU), and FSI is the EUV view `fsi174` of `--euv`; every Solar Orbiter frame carries the time at 1 AU, the calibrated images are not divided by the exposure time, and the two alternating FSI filters are separate programmes. The new layer `metis` and the view `--view c=solo` draw the Metis image and the reconstruction seen from Solar Orbiter. Citations of Müller et al. (2020), Antonucci et al. (2020), Rochus et al. (2020), and Howard et al. (2020) were checked with Argus. Both are off by default, and the 2013 figures are unchanged pixel for pixel. 12 new offline tests with synthetic headers in `tests/test_solo.py` and `tests/test_gcs_fit.py`.
 - STEREO frames of fewer than 512 pixels (summed on board) form an observing programme of their own in the GCS envelopes (`gcs.seq`). On 2024 May 9 the last COR2-A frame before the cutoff was a 256-pixel frame, so that every full COR2-A frame had been skipped as another binning and COR2-A gave almost no envelope.

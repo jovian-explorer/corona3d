@@ -7,9 +7,9 @@ authors:
     given-names: Keshav
     affiliation: "Space Physics Laboratory (SPL), Vikram Sarabhai Space Centre (VSSC), ISRO"
     email: keshavaggarwal2310@gmail.com
-version: 0.2.0
+version: 0.1.2
 license: MIT
-date-released: 2026-10-30
+date-released: 2026-11-04
 abstract: >-
   corona3d is a physics-based Python package that reconstructs the solar corona, a coronal mass
   ejection (CME), and the sources of its radio burst in three dimensions for any event from public

@@ -1,10 +1,10 @@
-<p align="center"><img src="docs/logo.png" width="180" alt="corona3d logo"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/jovian-explorer/corona3d/main/docs/logo.png" width="180" alt="corona3d logo"></p>
 
 # corona3d
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23801369.svg)](https://doi.org/10.5281/zenodo.23801369)
 
-> **Public** (pre-release). corona3d is ready for use and for testing, although its results can still change between versions, and problems, wrong results, and suggestions are welcome on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, please use [CITATION.cff](CITATION.cff); the Zenodo concept DOI [10.5281/zenodo.23801369](https://doi.org/10.5281/zenodo.23801369) always resolves to the latest version, and version 0.2.0 has [10.5281/zenodo.23801370](https://doi.org/10.5281/zenodo.23801370).
+> **Public** (pre-release). corona3d is ready for use and for testing, although its results can still change between versions, and problems, wrong results, and suggestions are welcome on the [issue tracker](https://github.com/jovian-explorer/corona3d/issues/new/choose). To cite corona3d, please use [CITATION.cff](https://github.com/jovian-explorer/corona3d/blob/main/CITATION.cff); the Zenodo concept DOI [10.5281/zenodo.23801369](https://doi.org/10.5281/zenodo.23801369) always resolves to the latest version, and version 0.1.1 has [10.5281/zenodo.23801370](https://doi.org/10.5281/zenodo.23801370).
 
 ## Purpose
 
@@ -14,7 +14,7 @@ corona3d is a Python package that we developed to make this three-dimensional re
 
 ## What is new in corona3d
 
-Compared with the earlier hand-built reconstruction of Morosan et al. (2022), corona3d adds several capabilities that make the result objective and repeatable. Its own field-line tracer integrates the unit field vector with a fourth-order Runge-Kutta scheme through the whole model, and on the run of 2013 October 25 its lines are tangent to the field (median |cos(line, B)| of 1.000, against 0.83 for the tracer of psipy that we tested), while every line is classed as open, closed, or undetermined. The streamer loops that the CME meets are selected without free parameters as the closed lines through the CME shell, and the GCS shell is fitted automatically to the coronagraph images, with the intersection over union (IoU) in each instrument as its objective and its measure of quality, with guards against degenerate shells and unconstrained directions, and with an apex height at the time of the burst that is extrapolated from the height-time profile of the front together with its uncertainty. Moreover, the coronagraph images are placed inside the three-dimensional reconstruction on one common scale, the radio sources are measured directly in the images of two radioheliographs and drawn as blobs or as contours at chosen levels, any viewpoint can be chosen, and every layer can be exported with its provenance. Finally, one command reconstructs any event from its time and flare position and writes a report that separates what was measured from what was assumed, and 150 offline tests check each step. Section 11 of the [user guide](docs/USER_GUIDE.md) compares the two reconstructions item by item.
+Compared with the earlier hand-built reconstruction of Morosan et al. (2022), corona3d adds several capabilities that make the result objective and repeatable. Its own field-line tracer integrates the unit field vector with a fourth-order Runge-Kutta scheme through the whole model, and on the run of 2013 October 25 its lines are tangent to the field (median |cos(line, B)| of 1.000, against 0.83 for the tracer of psipy that we tested), while every line is classed as open, closed, or undetermined. The streamer loops that the CME meets are selected without free parameters as the closed lines through the CME shell, and the GCS shell is fitted automatically to the coronagraph images, with the intersection over union (IoU) in each instrument as its objective and its measure of quality, with guards against degenerate shells and unconstrained directions, and with an apex height at the time of the burst that is extrapolated from the height-time profile of the front together with its uncertainty. Moreover, the coronagraph images are placed inside the three-dimensional reconstruction on one common scale, the radio sources are measured directly in the images of two radioheliographs and drawn as blobs or as contours at chosen levels, any viewpoint can be chosen, and every layer can be exported with its provenance. Finally, one command reconstructs any event from its time and flare position and writes a report that separates what was measured from what was assumed, and 150 offline tests check each step. Section 11 of the [user guide](https://github.com/jovian-explorer/corona3d/blob/main/docs/USER_GUIDE.md) compares the two reconstructions item by item.
 
 ## What corona3d does
 
@@ -34,19 +34,15 @@ Since every element is a key of the configuration, the same commands apply to an
 
 ## Install
 
-corona3d needs Python 3.12 or newer, because PyThea 1.3, which builds the GCS shell, requires it, and it runs on Windows, macOS, and Linux. Once corona3d is released on PyPI, one command installs it with every optional part:
+corona3d needs Python 3.12 or newer, because PyThea 1.3, which builds the GCS shell, requires it, and it runs on Windows, macOS, and Linux. It is released on PyPI, and one command installs it with every optional part:
 
 ```
 pip install "corona3d[all]"
 ```
 
-Until then, pip installs it directly from the public repository:
+The newest development version installs directly from the repository with `pip install "corona3d[all] @ git+https://github.com/jovian-explorer/corona3d.git"`.
 
-```
-pip install "corona3d[all] @ git+https://github.com/jovian-explorer/corona3d.git"
-```
-
-The plain package is the light core (downloads, event set-up, radio interval, `corona3d doctor`). The extras `render` (PyVista and PyThea, for the figures), `gcs` (PyThea and scikit-image, for the shell fit), and `radio` (h5py, for OVRO-LWA) add the heavy packages, `all` adds the three, and a command that needs a missing one names the extra to install. `corona3d --version` prints the version, and `corona3d doctor` reports the extras, the working directory (by default the platform cache directory, changed with `--home` or `CORONA3D_HOME`), and which archives answer. Since the newest pyhdf wheel for macOS requires macOS 26 and Homebrew no longer provides the HDF4 library, older Macs install with `pip install --prefer-binary`, which takes the previous pyhdf wheel, and `conda install -c conda-forge pyhdf` is an alternative on any system. The user guide ([Section 1](docs/USER_GUIDE.md#1-install-and-start)) gives the details.
+The plain package is the light core (downloads, event set-up, radio interval, `corona3d doctor`). The extras `render` (PyVista and PyThea, for the figures), `gcs` (PyThea and scikit-image, for the shell fit), and `radio` (h5py, for OVRO-LWA) add the heavy packages, `all` adds the three, and a command that needs a missing one names the extra to install. `corona3d --version` prints the version, and `corona3d doctor` reports the extras, the working directory (by default the platform cache directory, changed with `--home` or `CORONA3D_HOME`), and which archives answer. Since the newest pyhdf wheel for macOS requires macOS 26 and Homebrew no longer provides the HDF4 library, older Macs install with `pip install --prefer-binary`, which takes the previous pyhdf wheel, and `conda install -c conda-forge pyhdf` is an alternative on any system. The user guide ([Section 1](https://github.com/jovian-explorer/corona3d/blob/main/docs/USER_GUIDE.md#1-install-and-start)) gives the details.
 
 ## Quick start: one command for any event
 
@@ -71,7 +67,7 @@ corona3d export --format vtk                          # the layers as files for 
 corona3d animate --start 2024-05-09T17:30 --end 2024-05-09T17:40 --step 60 --radio --gif --mp4
 ```
 
-The figures are written to `figures/` together with the image of each panel (`view_a.png`, `view_b.png`, `view_c.png`). The options `--panel` and `--layout` of `render` and `animate` choose any views (Earth, solar north, STEREO, Solar Orbiter, or a Carrington direction) and draw them in one row, in one column, or as separate images, while `animate` writes a GIF and an MP4 of the reconstruction through a time interval (user guide, Section 4.1). Moreover, the [user guide](docs/USER_GUIDE.md) describes every command, option, and parameter, [docs/METHODS.md](docs/METHODS.md) derives how each element of the reconstruction is computed, [docs/LIMITATIONS.md](docs/LIMITATIONS.md) states where the results cannot be trusted, and [docs/MODEL_AUDIT.md](docs/MODEL_AUDIT.md) lists every method and number with its source and its test.
+The figures are written to `figures/` together with the image of each panel (`view_a.png`, `view_b.png`, `view_c.png`). The options `--panel` and `--layout` of `render` and `animate` choose any views (Earth, solar north, STEREO, Solar Orbiter, or a Carrington direction) and draw them in one row, in one column, or as separate images, while `animate` writes a GIF and an MP4 of the reconstruction through a time interval (user guide, Section 4.1). Moreover, the [user guide](https://github.com/jovian-explorer/corona3d/blob/main/docs/USER_GUIDE.md) describes every command, option, and parameter, [docs/METHODS.md](https://github.com/jovian-explorer/corona3d/blob/main/docs/METHODS.md) derives how each element of the reconstruction is computed, [docs/LIMITATIONS.md](https://github.com/jovian-explorer/corona3d/blob/main/docs/LIMITATIONS.md) states where the results cannot be trusted, and [docs/MODEL_AUDIT.md](https://github.com/jovian-explorer/corona3d/blob/main/docs/MODEL_AUDIT.md) lists every method and number with its source and its test.
 
 ## Validation: the CME of 2013 October 25
 
@@ -88,17 +84,17 @@ corona3d render --c2 --cor1 --cor2 --out figures/corona3d_wl.png
 
 The command `corona3d render` draws this event as seen from Earth, from above the solar north pole, and from STEREO-B. The electron-density surface lies at 9 × 10⁷ cm⁻³, the level that Morosan et al. used for the 173 MHz harmonic emission, and is coloured by the Alfvén speed between 100 and 700 km s⁻¹. The open and closed field lines are traced from 4,500 footpoints, and the closed lines that pass through the CME shell, the loops of the streamer that the CME meets, are drawn in purple.
 
-<p align="center"><img src="docs/corona3d_2013-10-25.png" width="100%" alt="The reconstruction of 2013 October 25 seen from Earth, the solar north pole, and STEREO-B"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/jovian-explorer/corona3d/main/docs/corona3d_2013-10-25.png" width="100%" alt="The reconstruction of 2013 October 25 seen from Earth, the solar north pole, and STEREO-B"></p>
 
 With `--c2 --cor1 --cor2`, the LASCO C2 image of 15:24 UT appears in the Earth view and the COR1 and COR2 images of STEREO-B appear in the STEREO-B view, each divided by the first image of the download window (14:35 to 14:39 UT). The shell is then drawn at 15:24 UT, the time of the images.
 
-<p align="center"><img src="docs/corona3d_2013-10-25_wl.png" width="100%" alt="The same reconstruction with LASCO C2 and STEREO-B COR1 and COR2 images"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/jovian-explorer/corona3d/main/docs/corona3d_2013-10-25_wl.png" width="100%" alt="The same reconstruction with LASCO C2 and STEREO-B COR1 and COR2 images"></p>
 
 With `--radio` and the NRH images of the event copied into `data/nrh/`, the sources of the burst are added as coloured blobs (user guide, Section 5.7). The images available for the afternoon of that day are those at 150.9 and 432 MHz, and between 14:59 and 15:03 UT one image per minute gives five blobs at 150.9 MHz and three at 432 MHz, at 1.647 and 1.221 R⊙. These frequencies differ from the 173 and 228 MHz of Morosan et al. (2022), so that the radio layer agrees with their sources in kind but not in frequency.
 
-<p align="center"><img src="docs/corona3d_2013-10-25_radio.png" width="100%" alt="The reconstruction with the NRH radio sources at 150.9 and 432 MHz as coloured blobs"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/jovian-explorer/corona3d/main/docs/corona3d_2013-10-25_radio.png" width="100%" alt="The reconstruction with the NRH radio sources at 150.9 and 432 MHz as coloured blobs"></p>
 
-Since the model run of Morosan et al. (2022) is no longer served and their CME shell and radio positions were not published, the comparison tests whether corona3d, working from public data alone, recovers the structures of their reconstruction. Among the public runs of the same Carrington rotation, the one whose density surface agrees best with the outline of theirs was chosen, the GCS shell was fitted by corona3d from the public coronagraph images, and the radio sources are measured from the NRH images that can be obtained today. Section 11 of the [user guide](docs/USER_GUIDE.md) lists what agrees, what differs, and what corona3d adds.
+Since the model run of Morosan et al. (2022) is no longer served and their CME shell and radio positions were not published, the comparison tests whether corona3d, working from public data alone, recovers the structures of their reconstruction. Among the public runs of the same Carrington rotation, the one whose density surface agrees best with the outline of theirs was chosen, the GCS shell was fitted by corona3d from the public coronagraph images, and the radio sources are measured from the NRH images that can be obtained today. Section 11 of the [user guide](https://github.com/jovian-explorer/corona3d/blob/main/docs/USER_GUIDE.md) lists what agrees, what differs, and what corona3d adds.
 
 ## Application: the CME and type II burst of 2024 May 9
 
@@ -113,7 +109,7 @@ corona3d fetch --ovro-lwa
 corona3d render --radio --shell-on-top
 ```
 
-The GCS shell of the preset was fitted to the COR1-A and COR2-A images at 17:55 UT with the direction held at the flare site, which gives an apex height of 3.722 R⊙ and an IoU of 0.878 in COR1-A. Earth and STEREO-A were separated by only about 12° in Carrington longitude, so that the two coronagraphs see the CME nearly from the same side and do not constrain its direction, and corona3d therefore ties the direction to the source region. Moreover, the coronagraph images show no rising front at 17:32 UT, and the apex height of 1.77 R⊙ at the time of the burst is assumed from a constant speed of about 985 km s⁻¹ after the flare onset at 17:23 UT, which the key `gcs_note` records. A shell this low lies partly inside the density surface, and `--shell-on-top` draws it, together with the radio sources, over the surface. The same event is reconstructed from its date alone with `corona3d event --time 2024-05-09 --flare S14W28 --burst 4`, and its `event_report.md` then states what was measured and what was assumed for this event, including the gap of LASCO C2 (user guide, Sections 9.1 and 9.5; [docs/LIMITATIONS.md](docs/LIMITATIONS.md), Sections 1 to 4).
+The GCS shell of the preset was fitted to the COR1-A and COR2-A images at 17:55 UT with the direction held at the flare site, which gives an apex height of 3.722 R⊙ and an IoU of 0.878 in COR1-A. Earth and STEREO-A were separated by only about 12° in Carrington longitude, so that the two coronagraphs see the CME nearly from the same side and do not constrain its direction, and corona3d therefore ties the direction to the source region. Moreover, the coronagraph images show no rising front at 17:32 UT, and the apex height of 1.77 R⊙ at the time of the burst is assumed from a constant speed of about 985 km s⁻¹ after the flare onset at 17:23 UT, which the key `gcs_note` records. A shell this low lies partly inside the density surface, and `--shell-on-top` draws it, together with the radio sources, over the surface. The same event is reconstructed from its date alone with `corona3d event --time 2024-05-09 --flare S14W28 --burst 4`, and its `event_report.md` then states what was measured and what was assumed for this event, including the gap of LASCO C2 (user guide, Sections 9.1 and 9.5; [docs/LIMITATIONS.md](https://github.com/jovian-explorer/corona3d/blob/main/docs/LIMITATIONS.md), Sections 1 to 4).
 
 ## What is measured and what is assumed
 
@@ -127,7 +123,7 @@ The GCS shell of the preset was fitted to the COR1-A and COR2-A images at 17:55 
 | Radio sources | sky-plane centroids of the NRH or OVRO-LWA images above `min_tb` | the height of the four-fold Newkirk model at the second harmonic, on the side facing the observer; no correction for scattering |
 | Observers | Carrington positions of Earth and STEREO from JPL Horizons through SunPy | none |
 
-[docs/LIMITATIONS.md](docs/LIMITATIONS.md) describes the cases in which these inputs fail, namely halo CMEs, data gaps, a small separation between Earth and STEREO, assumed heights, the manual step for the NRH, and the resolution of the model.
+[docs/LIMITATIONS.md](https://github.com/jovian-explorer/corona3d/blob/main/docs/LIMITATIONS.md) describes the cases in which these inputs fail, namely halo CMEs, data gaps, a small separation between Earth and STEREO, assumed heights, the manual step for the NRH, and the resolution of the model.
 
 ## Data sources
 
@@ -142,7 +138,7 @@ The model run and the images are public, and `corona3d fetch` downloads them int
 | OVRO-LWA spectral images (Stokes I, 10 s, 12 bands at 34 to 85 MHz), from 2024 April | [OVRO-LWA solar data](https://ovsa.njit.edu/docs/pages/ovro-lwa-solar-data-products/), public bucket on Amazon Web Services (CC BY 4.0); `corona3d fetch --ovro-lwa` | radio layer |
 | Other radio-source positions (optional) | supplied by the user | radio layer |
 
-SECCHI is the Sun Earth Connection Coronal and Heliospheric Investigation of STEREO. Work that uses these data should acknowledge the PSI model runs, the LASCO and SECCHI teams, the Nançay Radioheliograph, and OVRO-LWA with the references above, and all references are collected in [docs/refs.bib](docs/refs.bib).
+SECCHI is the Sun Earth Connection Coronal and Heliospheric Investigation of STEREO. Work that uses these data should acknowledge the PSI model runs, the LASCO and SECCHI teams, the Nançay Radioheliograph, and OVRO-LWA with the references above, and all references are collected in [docs/refs.bib](https://github.com/jovian-explorer/corona3d/blob/main/docs/refs.bib).
 
 ## Using corona3d from Python
 
@@ -150,7 +146,7 @@ SECCHI is the Sun Earth Connection Coronal and Heliospheric Investigation of STE
 
 ## Citing
 
-If you use corona3d, please cite it with [CITATION.cff](CITATION.cff), and cite Morosan et al. (2022) for the earlier reconstruction of the event of 2013 October 25 and for the density scaling and the radio heights that corona3d shares with it, Thernisien et al. ([2006](https://doi.org/10.1086/508254)) and Thernisien ([2011](https://doi.org/10.1088/0067-0049/194/2/33)) for the GCS model, Kouloumvakos et al. ([2022](https://doi.org/10.3389/fspas.2022.974137)) for PyThea, and the references of the data above.
+If you use corona3d, please cite it with [CITATION.cff](https://github.com/jovian-explorer/corona3d/blob/main/CITATION.cff), and cite Morosan et al. (2022) for the earlier reconstruction of the event of 2013 October 25 and for the density scaling and the radio heights that corona3d shares with it, Thernisien et al. ([2006](https://doi.org/10.1086/508254)) and Thernisien ([2011](https://doi.org/10.1088/0067-0049/194/2/33)) for the GCS model, Kouloumvakos et al. ([2022](https://doi.org/10.3389/fspas.2022.974137)) for PyThea, and the references of the data above.
 
 ## Licence
 
