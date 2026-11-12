@@ -562,8 +562,10 @@ def _geometry(n, layout):
     return W, H, panels, strip
 
 
-def _figure(items, sc, on, p, layout):
-    """The figure of the panels items = [(title, image, notes)] in one row or column, with the colour bars."""
+def _figure(items, sc, on, p, layout, bare=False):
+    """The figure of the panels items = [(title, image, notes)] in one row or column, with the colour bars.
+    bare: no panel tags, titles, notes, legend or colour-bar titles, only the colour bars with their tick labels
+    (32 pt, which is 9.3 pt when the 16 in wide figure is printed 4.8 in wide)."""
     W, H, rects, g = _geometry(len(items), layout)
     Y = g["y"]
     fig = Figure(figsize=(W, H))              # no GUI backend: drawn off screen
@@ -571,6 +573,8 @@ def _figure(items, sc, on, p, layout):
         ax = fig.add_axes(rect)
         ax.imshow(img)
         ax.set_xticks([]), ax.set_yticks([])
+        if bare:
+            continue
         lab, txt = title.split(" ", 1)
         ax.text(0.01, 0.985, lab, transform=ax.transAxes, fontsize=15, va="top")
         ax.text(0.06, 0.97, txt, transform=ax.transAxes, fontsize=15, va="top",
@@ -579,12 +583,15 @@ def _figure(items, sc, on, p, layout):
                 ha="right", bbox=dict(fc="white", ec="none", alpha=0.7))
     if on["surface"]:
         x, w, xl = g["va"]
-        cax = fig.add_axes([x, Y(0.07), w, Y(0.05)])
+        cax = fig.add_axes([x, Y(0.115 if bare else 0.07), w, Y(0.04 if bare else 0.05)])
         cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(*p["va_range"]), "Spectral_r"),
                           cax=cax, orientation="horizontal")
-        cb.ax.tick_params(labelsize=12)
-        fig.text(xl, Y(0.095), r"$v_A$ (km/s)", ha="right", va="center", fontsize=14)
-    if on["radio"] and sc.get("radio_legend"):
+        cb.ax.tick_params(labelsize=32 if bare else 12)
+        if bare:
+            cb.set_ticks([100, 400, 700])
+        else:
+            fig.text(xl, Y(0.095), r"$v_A$ (km/s)", ha="right", va="center", fontsize=14)
+    if on["radio"] and sc.get("radio_legend") and not bare:
         # which colour is which frequency, and how the lightness of a blob gives the time of its image
         from matplotlib.lines import Line2D
         hs = [Line2D([], [], ls="", marker="o", ms=9, mfc=c, mec="black", label=lab) for lab, c in sc["radio_legend"]]
@@ -592,7 +599,7 @@ def _figure(items, sc, on, p, layout):
                    handletextpad=0.1, labelspacing=0.25, borderaxespad=0.3)
         T0, T1 = sc["radio_time"]
         x, w, xl = g["time"]
-        cax = fig.add_axes([x, Y(0.07), w, Y(0.05)])
+        cax = fig.add_axes([x, Y(0.115 if bare else 0.07), w, Y(0.04 if bare else 0.05)])
         grey = colors.ListedColormap(chain_colours("#808080", np.linspace(0, 1, 256)))
         cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(0, 1), grey), cax=cax, orientation="horizontal",
                           ticks=[0, 1])
@@ -602,10 +609,12 @@ def _figure(items, sc, on, p, layout):
     if on["gcs"] and sc.get("gcs_scalars"):
         label, _, cmap, lim = sc["gcs_scalars"]
         x, w, xl = g["shell"]
-        cax = fig.add_axes([x, Y(0.07), w, Y(0.05)])
+        cax = fig.add_axes([x, Y(0.115 if bare else 0.07), w, Y(0.04 if bare else 0.05)])
         cb = fig.colorbar(cm.ScalarMappable(colors.Normalize(*lim), cmap), cax=cax, orientation="horizontal")
-        cb.ax.tick_params(labelsize=12)
-        if g["portrait"]:
+        cb.ax.tick_params(labelsize=32 if bare else 12)
+        if bare:
+            cb.set_ticks(np.linspace(lim[0], lim[1], 3))
+        elif g["portrait"]:
             fig.text(xl, Y(0.135), f"shell {label}", ha="center", va="center", fontsize=10)
         else:
             fig.text(xl, Y(0.095), f"shell {label}", ha="right", va="center", fontsize=14)
@@ -615,7 +624,7 @@ def _figure(items, sc, on, p, layout):
     return fig
 
 
-def compose(sc, on, p, half=None, panels=None, layout="landscape"):
+def compose(sc, on, p, half=None, panels=None, layout="landscape", bare=False):
     """Draw the panels of the reconstruction sc and put them on figures; returns [(key, Figure)]: one figure
     for landscape (1 x N) or portrait (N x 1), and one per panel for separate."""
     if layout not in LAYOUTS:
@@ -657,8 +666,8 @@ def compose(sc, on, p, half=None, panels=None, layout="landscape"):
         for k, _ in sel:
             seen[k] = seen.get(k, 0) + 1
             keys.append(k if seen[k] == 1 else f"{k}_{seen[k]}")
-        return [(k, _figure([it], sc, on, p, "portrait")) for k, it in zip(keys, items)]
-    return [(None, _figure(items, sc, on, p, layout))]
+        return [(k, _figure([it], sc, on, p, "portrait", bare)) for k, it in zip(keys, items)]
+    return [(None, _figure(items, sc, on, p, layout, bare))]
 
 
 def fig_array(fig, dpi=150):
@@ -671,7 +680,7 @@ def fig_array(fig, dpi=150):
 
 
 def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=None, panels=None, layout="landscape",
-                **layers):
+                bare=False, **layers):
     """Render the figure of the panels.
 
     data_root: working directory (its config.json, if present, is read); out: path of the
@@ -681,7 +690,9 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
     or wide enough for the white-light images that are switched on); panels: the views to draw
     (select_views; default: the three views of the configuration); layout: "landscape" (one row,
     the default), "portrait" (one column), or "separate" (one file per panel, with the name of the
-    view appended to out, e.g. corona3d_earth.png). Returns the path, or the list of paths for "separate".
+    view appended to out, e.g. corona3d_earth.png);
+    bare: no panel tags, titles, notes, legend or colour-bar titles, for figures whose caption carries them
+    (default False). Returns the path, or the list of paths for "separate".
     """
     bad = set(layers) - set(LAYERS)
     if bad:
@@ -697,7 +708,7 @@ def make_figure(out="figures/corona3d.png", data_root=".", half=None, params=Non
     sc = reconstruct(p, on, data_root)
     p["_png_dir"] = out.parent                               # the image of every panel is kept as view_a.png, ...
     paths = []
-    for key, fig in compose(sc, on, p, half, panels, layout):
+    for key, fig in compose(sc, on, p, half, panels, layout, bare):
         path = out if key is None else out.with_name(f"{out.stem}_{key}{out.suffix}")
         fig.savefig(path, dpi=150)
         paths.append(path)

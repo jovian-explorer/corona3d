@@ -86,6 +86,8 @@ def figure_options(r):
                    help="a view to draw, in this order (repeatable, or a comma list): earth, north, stereo, solo, or "
                         "Carrington degrees lon,lat[,roll] of the viewing direction; default: the three views of "
                         "config.json. A view that is not in the configuration takes the default framing")
+    r.add_argument("--bare", action="store_true",
+                   help="no panel tags, titles, notes, legend or colour-bar titles (the caption carries them)")
     r.add_argument("--layout", choices=("landscape", "portrait", "separate"), default="landscape",
                    help="the panels in one row (landscape, default), one column (portrait), or one file per view "
                         "(separate: the name of the view is appended to --out)")
@@ -349,6 +351,7 @@ def _main(argv=None):
     spp = sub.add_parser("spectra", help="dynamic spectra of the type II burst (e-CALLISTO, OVRO-LWA), its lanes, shock speed, "
                          "and band-split Mach number", description="docs/METHODS.md, Section 22.")
     spp.add_argument("--out", default="analysis/spectra", help="output folder, relative to the working directory")
+    spp.add_argument("--bare", action="store_true", help="spectrum figures without titles or lane labels, small size with 9.5 pt text")
     e = sub.add_parser("export", help="write every enabled layer to data files with a JSON metadata sidecar",
                        epilog="layers: " + ", ".join(LAYERS))
     for k in LAYERS:
@@ -476,7 +479,8 @@ def _main(argv=None):
             sys.exit(f"corona3d animate: {e}")
         return
     from .reconstruction import make_figure
-    make_figure(a.out, h, a.half, params, panels=panels, layout=a.layout, **{k: getattr(a, k) for k in LAYERS})
+    make_figure(a.out, h, a.half, params, panels=panels, layout=a.layout, bare=a.bare,
+                **{k: getattr(a, k) for k in LAYERS})
 
 
 if __name__ == "__main__":

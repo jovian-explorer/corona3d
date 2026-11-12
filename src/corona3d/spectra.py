@@ -553,10 +553,13 @@ def analyse_one(name, spec, t0, t1, s, prof, emission_default):
     return res
 
 
-def figure(res, t0, out):
+def figure(res, t0, out, bare=False):
     from matplotlib.figure import Figure
     tg, fg, z = res["_plot"]
-    fig = Figure(figsize=(9, 4.5))
+    fig = Figure(figsize=(2.3, 1.5) if bare else (9, 4.5))
+    if bare:                                   # printed size: 9 pt text, no title, no lane labels
+        import matplotlib as mpl
+        mpl.rcParams.update({"font.size": 9.5, "axes.labelsize": 9.5, "xtick.labelsize": 9.5, "ytick.labelsize": 9.5})
     ax = fig.add_subplot(1, 1, 1)
     ax.pcolormesh(tg / 60.0, fg, np.nan_to_num(z, nan=0.0), cmap="viridis", vmin=-1, vmax=6, shading="auto")
     ax.set_yscale("log")
@@ -567,13 +570,20 @@ def figure(res, t0, out):
             tt = np.array([min(l["t"]), max(l["t"])])
             tm = (datetime.fromisoformat(l["t_mid"]) - t0).total_seconds()
             ax.plot(tt / 60.0, l["f_mid_mhz"] * np.exp(l["drift_per_s"] * (tt - tm)), "-", color="r", lw=1.5)
-            ax.text(tt[0] / 60.0, l["f_mid_mhz"] * np.exp(l["drift_per_s"] * (tt[0] - tm)), f" {l['kind']} ({l['emission']})",
-                    color="r", fontsize=8)
-    ax.set_xlabel(f"minutes after {t0:%Y-%m-%d %H:%M:%S} UT")
-    ax.set_ylabel("frequency (MHz)")
-    ax.set_title(res["name"])
+            if not bare:
+                ax.text(tt[0] / 60.0, l["f_mid_mhz"] * np.exp(l["drift_per_s"] * (tt[0] - tm)), f" {l['kind']} ({l['emission']})",
+                        color="r", fontsize=8)
+    ax.set_xlabel(f"Minutes after {t0:%H:%M:%S} UT" if bare else f"minutes after {t0:%Y-%m-%d %H:%M:%S} UT")
+    if bare:                                   # plain frequencies instead of powers of ten
+        from matplotlib.ticker import NullFormatter, ScalarFormatter
+        ax.set_yticks([v for v in (20, 30, 40, 50, 60, 80, 100, 150, 200) if fg.min() <= v <= fg.max()])
+        ax.yaxis.set_major_formatter(ScalarFormatter())
+        ax.yaxis.set_minor_formatter(NullFormatter())
+    ax.set_ylabel("Frequency (MHz)" if bare else "frequency (MHz)")
+    if not bare:
+        ax.set_title(res["name"])
     fig.tight_layout()
-    fig.savefig(out, dpi=120)
+    fig.savefig(out, dpi=500 if bare else 120)
     return out
 
 
@@ -685,7 +695,7 @@ def reference_values(home, p):
     return out
 
 
-def write(out, summ, t0):
+def write(out, summ, t0, bare=False):
     import csv
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
@@ -693,7 +703,7 @@ def write(out, summ, t0):
     for r in summ["spectra"]:
         safe = re.sub(r"[^A-Za-z0-9_-]+", "_", r["name"])
         try:
-            figure(r, t0, out / f"spectrum_{safe}.png")
+            figure(r, t0, out / f"spectrum_{safe}.png", bare)
         except Exception:
             pass
         for l in r["lanes"]:
@@ -761,7 +771,7 @@ def run(home, cfg, a):
     """The `corona3d spectra` command."""
     from .report_sections import update
     summ = analyse(home)
-    out = write(Path(home) / a.out, summ, datetime.fromisoformat(summ["window"][0]))
+    out = write(Path(home) / a.out, summ, datetime.fromisoformat(summ["window"][0]), getattr(a, "bare", False))
     lines = report_lines(summ)
     print("\n".join(lines))
     update(home, "Dynamic spectra", lines)
