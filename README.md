@@ -150,12 +150,12 @@ Dates are in UTC and are taken from the git history, the GitHub releases and the
 
 | Date | Event |
 |---|---|
-| 26 October 2026 | Development began, and the GitHub repository was created and made public. |
+| 26 October 2026 | GitHub repository created and made public. |
 | 27 October 2026 | First tagged version (tag v0.1.0). |
 | 30 October 2026 | Version 0.1.1 (tag v0.2.0), the first release archived on Zenodo ([10.5281/zenodo.23801370](https://doi.org/10.5281/zenodo.23801370)). |
 | 4 November 2026 | Version 0.1.2 ([10.5281/zenodo.23947719](https://doi.org/10.5281/zenodo.23947719)). |
 
-The changes in each version are listed in [CHANGELOG.md](CHANGELOG.md).
+corona3d was developed together with Dr. Anshu Kumari, and the paper that describes it is under review in Solar Physics. The changes in each version are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Citing
 
@@ -167,7 +167,7 @@ corona3d is free software under the MIT licence (`LICENSE`). Copyright 2026 Kesh
 
 ## Author
 
-Keshav Aggarwal, Student Visitor, Space Physics Laboratory (SPL), Vikram Sarabhai Space Centre (VSSC), Indian Space Research Organisation (ISRO), Thiruvananthapuram.
+Keshav Aggarwal, Student Visitor, Space Physics Laboratory (SPL), Vikram Sarabhai Space Centre (VSSC), Indian Space Research Organisation (ISRO), Thiruvananthapuram. corona3d was developed together with Dr. Anshu Kumari.
 
 ## Tests
 
