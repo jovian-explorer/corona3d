@@ -144,6 +144,19 @@ SECCHI is the Sun Earth Connection Coronal and Heliospheric Investigation of STE
 
 `corona3d.build(home, **layers)` returns the layers of a working directory as NumPy arrays in a `Reconstruction`, and `corona3d export` writes them as `npz`, `csv`, or VTK files together with `metadata.json`, which records the version, the configuration, and the sources of every input (user guide, Section 8). In this way the density, the Alfvén speed, the field lines, the shell, and the radio positions of an event can be used in further analysis without the figure.
 
+## Release history
+
+Dates are in UTC and are taken from the git history, the GitHub releases and the Zenodo archive of each version.
+
+| Date | Event |
+|---|---|
+| 26 October 2026 | Development began, and the GitHub repository was created and made public. |
+| 27 October 2026 | First tagged version (tag v0.1.0). |
+| 30 October 2026 | Version 0.1.1 (tag v0.2.0), the first release archived on Zenodo ([10.5281/zenodo.23801370](https://doi.org/10.5281/zenodo.23801370)). |
+| 4 November 2026 | Version 0.1.2 ([10.5281/zenodo.23947719](https://doi.org/10.5281/zenodo.23947719)). |
+
+The changes in each version are listed in [CHANGELOG.md](CHANGELOG.md).
+
 ## Citing
 
 If you use corona3d, please cite it with [CITATION.cff](https://github.com/jovian-explorer/corona3d/blob/main/CITATION.cff), and cite Morosan et al. (2022) for the earlier reconstruction of the event of 2013 October 25 and for the density scaling and the radio heights that corona3d shares with it, Thernisien et al. ([2006](https://doi.org/10.1086/508254)) and Thernisien ([2011](https://doi.org/10.1088/0067-0049/194/2/33)) for the GCS model, Kouloumvakos et al. ([2022](https://doi.org/10.3389/fspas.2022.974137)) for PyThea, and the references of the data above.
