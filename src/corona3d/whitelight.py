@@ -1,4 +1,4 @@
-"""LASCO C2, STEREO (A or B) COR1/COR2 and Solar Orbiter/Metis images as planes in the three-dimensional
+"""LASCO C2 and C3, STEREO (A or B) COR1/COR2 and Solar Orbiter/Metis images as planes in the three-dimensional
 reconstruction.
 
 Each frame is normalised by its exposure time, binned, compared with the first frame of the
@@ -21,10 +21,12 @@ from .geometry import observer_basis
 # inner and outer edge of the field of view [R_sun] (COR2 starts where COR1 ends, so the two
 # coplanar STEREO images do not overlap); observer key in the configuration
 INSTR = dict(c2=dict(r=(2.2, 6.0), obs="earth"),
+             c3=dict(r=(3.7, 30.0), obs="earth"),           # from C3_WITH_C2 when C2 is drawn too
              cor1=dict(r=(1.5, 4.0), obs="stereo"),
              cor2=dict(r=(4.0, 15.0), obs="stereo"),
              metis=dict(r=None, obs="solo"))           # Metis: the field from the header (solo.metis_fov)
 NBIN = 256
+C3_WITH_C2 = 6.0          # inner edge of C3 [R_sun] when the C2 plane is drawn too, so that the coplanar images do not overlap
 
 
 def utc(t):
@@ -42,16 +44,26 @@ def _time(f):
     return datetime.fromisoformat(h["DATE-OBS"][:19])
 
 
+def _header(f):
+    """Primary header of a file, or {} for a file that is not FITS (a damaged download)."""
+    try:
+        return fits.getheader(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def _frames(wl_dir, inst, sc="B"):
     """[(time, [files])] of total-brightness frames, earliest first."""
     d = Path(wl_dir)
-    if inst == "c2":
-        fs = []
-        for f in sorted(d.glob("2*.fts")):
-            h = fits.getheader(f) if f.stem.isdigit() else {}
-            if h.get("DETECTOR") == "C2" and h.get("POLAR") == "Clear" and h.get("NAXIS1") == 1024:
-                fs.append(f)
-        return [(_time(f), [f]) for f in fs]
+    if inst in ("c2", "c3"):                          # LASCO level 0.5: numeric names (C2 2..., C3 3...), told apart by the header
+        fs, cal = [], []
+        for f in sorted(d.glob("[0-9]*.fts")):
+            h = _header(f) if f.stem.isdigit() else {}
+            if h.get("DETECTOR") == inst.upper() and str(h.get("POLAR", "Clear")).strip() == "Clear" and h.get("NAXIS1") == 1024:
+                # the VSO also serves calibrated level-1 files (C3 35..., ISO DATE-OBS, no TIME-OBS) beside level 0.5 (DN):
+                # a ratio across the two levels is meaningless, so one level is used, level 0.5 whenever it exists
+                (cal if "T" in str(h.get("DATE-OBS", "")) and not h.get("TIME-OBS") else fs).append(f)
+        return [(_time(f), [f]) for f in (fs or cal)]
     if inst == "cor2":
         return [(_time(f), [f]) for f in sorted(d.glob(f"*_d4c2{sc}.fts"))]
     if inst == "metis":
@@ -117,11 +129,12 @@ def nearest_frame(wl_dir, inst, sc, window, when):
     return tf, (tf - t).total_seconds() / 60.0
 
 
-def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B", nearest=False):
+def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B", nearest=False, r_range=None):
     """Plane of one instrument at the frame nearest to `when`, compared with the first frame of
     `window` ([start, end]); returns (grid, frame time, base time). With `nearest` a frame farther
     than WL_MAX_GAP_MIN is used too, as long as it is the nearest one after the base frame (the
-    caller labels it); without it such a frame is refused."""
+    caller labels it); without it such a frame is refused. r_range: (inner, outer) edge [R_sun] in place of
+    the field of INSTR (C3 starts at C3_WITH_C2 when C2 is drawn as well)."""
     t0, t1 = utc(window[0]), utc(window[1])
     every = _frames(wl_dir, inst, sc)
     frames = [f for f in every if t0 <= f[0] <= t1]
@@ -159,7 +172,7 @@ def load_plane(inst, wl_dir, when, observer, window, mode="ratio", sc="B", neare
     X, Y = np.meshgrid((np.arange(nx) - c[0]) * s, (np.arange(ny) - c[1]) * s)
     v = diff.data.copy()
     r = np.hypot(X, Y)
-    lo, hi = INSTR[inst]["r"] or field(files[0])
+    lo, hi = r_range or INSTR[inst]["r"] or field(files[0])
     v[(r < lo) | (r > hi)] = np.nan
     ex, ey, _ = observer_basis(*observer)
     P = X[..., None] * ex + Y[..., None] * ey

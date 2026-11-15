@@ -26,8 +26,8 @@ from .paths import config, default_config, merge, model_dir, wl_dir
 
 pv = need("render", "pyvista", "the drawing of the figure")
 
-WL = ("c2", "cor1", "cor2", "metis")
-IMAGES_OF = {"earth": ("c2",), "stereo": ("cor2", "cor1"), "solo": ("metis",)}
+WL = ("c2", "c3", "cor1", "cor2", "metis")
+IMAGES_OF = {"earth": ("c3", "c2"), "stereo": ("cor2", "cor1"), "solo": ("metis",)}
 OBSERVERS = ("earth", "stereo", "solo")               # observers with a position in the configuration
 
 
@@ -306,12 +306,13 @@ def reconstruct(p=None, on=None, data_root=".", cache=None):
             sc["radio_ranges"] = height_segments(p, sc, data_root, m)
     for inst in WL:
         if on[inst]:
-            from .whitelight import INSTR, WL_MAX_GAP_MIN, load_plane, utc
+            from .whitelight import C3_WITH_C2, INSTR, WL_MAX_GAP_MIN, load_plane, utc
             if INSTR[inst]["obs"] not in p:
                 raise ValueError(f"{inst}: the configuration has no position of {INSTR[inst]['obs']}; run corona3d fetch --solo")
             burst = p.get("wl_at") == "burst"
             sc[inst], tf, tb = load_plane(inst, wl_dir(data_root), p["wl_time"], p[INSTR[inst]["obs"]],
-                                          p["wl_window"], p["wl_mode"], p["stereo_sc"], nearest=burst)
+                                          p["wl_window"], p["wl_mode"], p["stereo_sc"], nearest=burst,
+                                          r_range=(C3_WITH_C2, INSTR["c3"]["r"][1]) if inst == "c3" and on["c2"] else None)
             sc["times"][inst] = (tf, tb)
             gap = (tf - utc(p["wl_time"])).total_seconds() / 60.0
             if burst and abs(gap) > WL_MAX_GAP_MIN:        # a frame far from the burst: say so on the figure
@@ -634,7 +635,7 @@ def compose(sc, on, p, half=None, panels=None, layout="landscape", bare=False):
     imgs, titles, owners = [], [], []
     for i, (_, v) in enumerate(sel):
         d, up, owner = view_geometry(v, p)
-        wide = (6.0 if on["c2"] else None) if owner == "earth" else \
+        wide = (30.0 if on["c3"] else 6.0 if on["c2"] else None) if owner == "earth" else \
             (6.0 if on["cor2"] else 4.0 if on["cor1"] else None) if owner == "stereo" else None
         if owner == "solo" and on["metis"]:              # the outer edge of the Metis image, which scales with distance
             wide = float(np.linalg.norm(sc["metis"].points[np.isfinite(sc["metis"]["wl"])], axis=1).max())

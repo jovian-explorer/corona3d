@@ -54,8 +54,12 @@ def world(tmp_path, monkeypatch):
         calls.append("wl")
         d = h / "data" / "wl"
         d.mkdir(parents=True, exist_ok=True)
-        for n in ("20131025120000.fts", "20131025_s4c1B.fts", "20131025_d4c2B.fts"):
+        for n in ("20131025_s4c1B.fts", "20131025_d4c2B.fts"):
             (d / n).write_bytes(b"x")
+        import numpy as np
+        from astropy.io import fits as _f                  # LASCO files are told apart by DETECTOR
+        h = _f.Header({"DATE-OBS": "2013/10/25", "TIME-OBS": "12:00:00.000", "DETECTOR": "C2", "POLAR": "Clear"})
+        _f.PrimaryHDU(np.zeros((1, 1024), np.float32), h).writeto(d / "20131025120000.fts")
         return 0
 
     def figure(out, h, half, params, **layers):
@@ -430,7 +434,7 @@ def test_white_light_panel_moves_to_the_nearest_frame_when_no_instrument_has_one
     t = lambda h, m: datetime(2013, 10, 25, h, m)
     frames = {"c2": [(t(16, 40), []), (t(16, 50), [])], "cor1": [(t(14, 10), []), (t(14, 20), [])],
               "cor2": [(t(14, 30), [])]}
-    monkeypatch.setattr(whitelight, "_frames", lambda wl, k, sc="B": frames[k])
+    monkeypatch.setattr(whitelight, "_frames", lambda wl, k, sc="B": frames.get(k, []))     # no C3 images
     code, log = run(world)
     assert code == 0
     assert config(world.home)["wl_time"] == "2013-10-25T16:50:00"

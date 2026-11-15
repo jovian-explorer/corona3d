@@ -314,9 +314,8 @@ def frames_of(wl, key):
     """[(time, [files])] of total-brightness frames of one instrument, earliest first."""
     d = Path(wl)
     if key == "c2":
-        fs = [f for f in sorted(d.glob("2*.fts")) if f.stem.isdigit()
-              and fits.getheader(f).get("NAXIS1") == 1024 and fits.getheader(f).get("POLAR") == "Clear"]
-        return [(_t(f), [f]) for f in fs]
+        from .whitelight import _frames                 # C3 files share the folder: told apart by DETECTOR
+        return _frames(d, "c2")
     if key.startswith("cor2"):
         return [(_t(f), [f]) for f in sorted(d.glob(f"*_d4c2{key[-1].upper()}.fts"), key=_t)]
     if key == "metis":                                 # Solar Orbiter/Metis tB; the field from the header

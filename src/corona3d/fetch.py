@@ -1,4 +1,4 @@
-"""Downloads of the public data: the PSI MAS/MAST run, and the LASCO C2 and STEREO (A or B) COR1 and
+"""Downloads of the public data: the PSI MAS/MAST run, and the LASCO C2, C3 and STEREO (A or B) COR1 and
 COR2 images (with --cor1a also the STEREO-A COR1 images used by `corona3d gcs`) through
 the Virtual Solar Observatory."""
 import urllib.request
@@ -54,7 +54,7 @@ def whitelight(h, cfg, cor1a=False):
     d = wl_dir(h)
     d.mkdir(parents=True, exist_ok=True)
     t = a.Time(*cfg["wl_window"])
-    queries = [(a.Instrument("LASCO"), a.Detector("C2")),
+    queries = [(a.Instrument("LASCO"), a.Detector("C2")), (a.Instrument("LASCO"), a.Detector("C3")),
                (a.Instrument("SECCHI"), a.Detector("COR1"), a.Source(f"STEREO_{cfg['stereo_sc']}")),
                (a.Instrument("SECCHI"), a.Detector("COR2"), a.Source(f"STEREO_{cfg['stereo_sc']}"))]
     if cor1a and cfg["stereo_sc"] != "A":

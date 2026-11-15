@@ -169,7 +169,7 @@ def _main(argv=None):
     f.add_argument("--model", action="store_true", help="only the MAS/MAST run")
     f.add_argument("--model-extra", action="store_true",
                    help="only the temperature and flow files of the run (t002, vr002, vt002, vp002), used by corona3d shock")
-    f.add_argument("--wl", action="store_true", help="only the LASCO C2 and STEREO COR1, COR2 images")
+    f.add_argument("--wl", action="store_true", help="only the LASCO C2, C3 and STEREO COR1, COR2 images")
     f.add_argument("--cor1a", action="store_true", help="also the STEREO-A COR1 images (for corona3d gcs)")
     f.add_argument("--euv", action="store_true",
                    help="only the SDO/AIA 193 and 211 A and STEREO/EUVI 195 A images of euv_window (for corona3d gcs --euv)")

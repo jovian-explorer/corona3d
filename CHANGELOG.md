@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- LASCO C3 as a white-light layer (`c3`, off by default; `corona3d render --c3`, `make_figure(c3=True)`). `corona3d fetch --wl` also downloads the C3 images of `wl_window`; C2 and C3 level-0.5 files share `data/wl/` and their numeric names and are told apart by the header keyword DETECTOR (`whitelight._frames`, also used by `gcs.frames_of` for C2, so that C3 files never enter a C2 fit, and by `pipeline.wl_available`). The C3 plane covers 3.7 to 30 R⊙ in the Earth view and starts at 6 R⊙ when the C2 plane is drawn as well, so that the coplanar images do not overlap (`whitelight.C3_WITH_C2`, `load_plane(r_range=)`); with C3 on, the Earth panel is 30 R⊙ wide unless `--half` is given. A file that is not FITS is skipped instead of stopping the frame search. 2 new offline tests in `tests/test_whitelight.py`; the 2013 figures are unchanged (C3 is off by default).
+
 ## 0.1.2 (2026-11-04)
 
 - First release on PyPI: `pip install corona3d` (or `pip install "corona3d[all]"` with every extra). A pushed version tag now publishes to PyPI through a trusted publisher, and the README links and images use absolute URLs so that they show on PyPI.

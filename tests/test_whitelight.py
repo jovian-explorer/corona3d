@@ -123,3 +123,56 @@ def test_a_gap_in_the_frames_is_refused_and_the_nearest_frame_times_are_named(tm
     _write(tmp_path, "20131025_175900_d4c2B.fts", "2013-10-25T17:59:51", roll=0.0)
     with pytest.raises(ValueError, match=r"15:24:51 \(before\) and 2013-10-25T17:59:51 \(after\)"):
         load_plane("cor2", tmp_path, "2013-10-25T16:40", OBS, wide)
+
+
+def test_c3_frames_are_told_apart_from_c2(tmp_path):
+    """C2 and C3 level-0.5 files share the folder and the numeric names; DETECTOR separates them."""
+    def lasco(name, det, t, nx=1024, **kw):
+        h = fits.Header({"DATE-OBS": "2016/06/01", "TIME-OBS": t, "DETECTOR": det, **kw})
+        fits.PrimaryHDU(np.zeros((1, nx), np.float32), h).writeto(tmp_path / name)
+    lasco("22593900.fts", "C2", "00:24:05.000", POLAR="Clear")
+    lasco("32593901.fts", "C3", "00:30:05.000", FILTER="Clear")      # C3: names start with 3, no POLAR keyword
+    lasco("32593902.fts", "C3", "00:42:05.000", nx=512)
+    (tmp_path / "22593903.fts").write_bytes(b"x")                     # damaged download: skipped
+    h = fits.Header({"DATE-OBS": "2016-06-01T00:29:10.497", "DETECTOR": "C3", "POLAR": "Clear"})   # level 1 beside level 0.5
+    fits.PrimaryHDU(np.zeros((1, 1024), np.float32), h).writeto(tmp_path / "35463249.fts")
+    assert [f[1][0].name for f in _frames(tmp_path, "c2")] == ["22593900.fts"]
+    assert [f[1][0].name for f in _frames(tmp_path, "c3")] == ["32593901.fts"]
+    from corona3d.gcs import frames_of
+    assert [f[1][0].name for f in frames_of(tmp_path, "c2")] == ["22593900.fts"]
+    from corona3d.pipeline import wl_available
+    assert wl_available(tmp_path, "A") == dict(c2=True, c3=True, cor1=False, cor2=False)
+
+
+def _lasco_pair(d, det, blob):
+    """A base and a later LASCO frame seen from Earth (level-0.5 style names), the later one with a blob."""
+    for name, t, b in (("32000001.fts", "2016-06-01T00:00:05", None), ("32000002.fts", "2016-06-01T00:30:05", blob)):
+        obs = SkyCoord(0 * u.deg, 0 * u.deg, 1 * u.AU, frame=frames.HeliographicStonyhurst, obstime=t)
+        ref = SkyCoord(0 * u.arcsec, 0 * u.arcsec, frame=frames.Helioprojective(observer=obs, obstime=t))
+        hdr = sunpy.map.make_fitswcs_header((1024, 1024), ref, scale=[56.0, 56.0] * u.arcsec / u.pix)
+        hdr.update({"exptime": 19.0, "detector": det, "polar": "Clear", "date-obs": t[:10].replace("-", "/"), "time-obs": t[11:] + ".000"})
+        m = sunpy.map.Map(np.zeros((1024, 1024)), hdr)
+        data = np.ones((1024, 1024))
+        if b is not None:
+            rs = m.rsun_obs.to_value(u.arcsec)
+            i, j = (int(round(float(v))) for v in m.wcs.world_to_pixel(SkyCoord(b[0] * rs * u.arcsec, b[1] * rs * u.arcsec, frame=m.coordinate_frame)))
+            data[j - 6:j + 6, i - 6:i + 6] += 100.0
+        sunpy.map.Map(data, m.meta).save(str(d / name), overwrite=True)
+
+
+def test_c3_plane_places_a_feature_far_out_and_yields_to_c2(tmp_path):
+    """A C3 feature at 12 R_sun west lands at its place on the Earth plane; inside 3.7 R_sun (or 6 R_sun when
+    C2 is drawn too) the C3 plane is left transparent."""
+    _lasco_pair(tmp_path, "C3", (-12.0, 3.0))
+    earth = (0.0, 0.0)
+    win = ["2016-06-01T00:00", "2016-06-01T01:00"]
+    g, tf, tb = load_plane("c3", tmp_path, "2016-06-01T00:30", earth, win)
+    v = np.asarray(g["wl"]); p = g.points[np.nanargmax(v)]
+    ex, ey, _ = observer_basis(*earth)
+    assert p @ ex == pytest.approx(-12.0, abs=0.5) and p @ ey == pytest.approx(3.0, abs=0.5)
+    r = np.hypot(g.points @ ex, g.points @ ey)
+    assert np.isnan(v[r < 3.6]).all() and np.isfinite(v[(r > 4.0) & (r < 5.5)]).any()
+    from corona3d.whitelight import C3_WITH_C2, INSTR
+    g2, _, _ = load_plane("c3", tmp_path, "2016-06-01T00:30", earth, win, r_range=(C3_WITH_C2, INSTR["c3"]["r"][1]))
+    r2 = np.hypot(g2.points @ ex, g2.points @ ey)
+    assert np.isnan(np.asarray(g2["wl"])[r2 < 5.9]).all()

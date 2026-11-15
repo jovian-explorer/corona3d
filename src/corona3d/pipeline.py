@@ -30,10 +30,13 @@ FIGURES = {"base": "figures/corona3d.png", "wl": "figures/wl/corona3d.png", "rad
 
 
 def wl_available(wl, sc):
-    """{'c2', 'cor1', 'cor2': bool} for the white-light images in a folder (STEREO spacecraft sc)."""
+    """{'c2', 'c3', 'cor1', 'cor2': bool} for the white-light images in a folder (STEREO spacecraft sc)."""
+    from .whitelight import _frames
     d, sc = Path(wl), sc.upper()
-    return dict(c2=any(f.stem.isdigit() for f in d.glob("2*.fts")), cor1=any(d.glob(f"*_[sn][45]c1{sc}.fts")),
-                cor2=any(d.glob(f"*_d4c2{sc}.fts"))) if d.exists() else dict(c2=False, cor1=False, cor2=False)
+    if not d.exists():
+        return dict(c2=False, c3=False, cor1=False, cor2=False)
+    return dict(c2=bool(_frames(d, "c2")), c3=bool(_frames(d, "c3")), cor1=any(d.glob(f"*_[sn][45]c1{sc}.fts")),
+                cor2=any(d.glob(f"*_d4c2{sc}.fts")))
 
 
 def wl_gaps(wl, cfg, wl_on, sc):
@@ -314,7 +317,7 @@ def run(h, a, log=print):
 
     # render
     from . import reconstruction
-    figures, wl_on = {}, {k: avail[k] for k in ("c2", "cor1", "cor2")}
+    figures, wl_on = {}, {k: avail[k] for k in ("c2", "c3", "cor1", "cor2")}
     burst = getattr(a, "wl_at", "fit") == "burst"
     st["wl_gap"] = gaps = wl_gaps(paths.wl_dir(h), cfg, wl_on, sc) if not burst else wl_gaps_burst(paths.wl_dir(h), cfg, wl_on, sc)
     st["wl_at"] = "burst" if burst else "fit"
@@ -528,7 +531,7 @@ def report(h, cfg, a, flare, views, avail, st, steps, failed):
     miss = [v for v in VARS if not (d / f"{v}.hdf").exists()]
     if miss:
         missing.append(f"Model files not downloaded: {', '.join(miss)}.")
-    inst = {"c2": "LASCO C2", "cor1": f"STEREO-{sc} COR1", "cor2": f"STEREO-{sc} COR2"}
+    inst = {"c2": "LASCO C2", "c3": "LASCO C3", "cor1": f"STEREO-{sc} COR1", "cor2": f"STEREO-{sc} COR2"}
     missing += [f"No {inst[k]} images in data/wl." for k, ok in avail.items() if not ok]
     missing += [f"{inst[k]}: {m}; left out of the white-light figure." for k, m in (st.get("wl_gap") or {}).items()]
     if a.fit != "skip" and not views:

@@ -162,6 +162,7 @@ draws the three-panel figure into `figures/corona3d.png`. By default, panel a sh
 corona3d render --no-open --no-closed --out figures/surface.png          # the density surface, the streamer, and the CME only
 corona3d render --no-surface --out figures/field.png                       # the field lines without the surface
 corona3d render --c2 --cor1 --cor2 --out figures/corona3d_wl.png           # with the coronagraph images
+corona3d render --c2 --c3 --half 15 --out figures/corona3d_c3.png          # LASCO C3 beyond 6 R_sun in the Earth view
 corona3d render --cor1 --no-open --no-closed --out figures/cor1.png        # COR1 in panel c (widened to 4 R_sun); the other layers stay on
 corona3d render --cor2 --half 15 --out figures/cor2_full.png               # the whole COR2 field, out to 15 R_sun, in all panels
 corona3d render --c2 --wl-time 2013-10-25T15:36 --out figures/c2_1536.png  # a later C2 frame
